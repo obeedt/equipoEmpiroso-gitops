@@ -1,0 +1,9 @@
+# Credenciales y archivos generados
+*.log
+*.retry
+*.zip
+kubeconfig*
+admin.conf
+.env
+*secret*.yaml
+!*sealed*secret*.yaml
