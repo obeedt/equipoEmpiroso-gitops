@@ -1,0 +1,40 @@
+---
+# ─── Versiones fijadas (las mismas van en el README del proyecto) ────
+k8s_minor: "1.37"            # rama del repositorio pkgs.k8s.io
+k8s_version: "1.37.2"        # paquetes kubelet/kubeadm/kubectl exactos
+containerd_version: "2.4.2"  # containerd.io del repositorio de Docker
+flannel_version: "v0.28.10"  # manifiesto en templates/kube-flannel.yml.j2
+
+# ─── Redes del clúster ───────────────────────────────────────────────
+pod_cidr: "10.244.0.0/16"    # la misma red que usa Flannel por defecto
+svc_cidr: "10.96.0.0/12"
+# Nombre (no IP) del API server: permite cambiar de IP sin rehacer certificados
+k8s_api_name: "k8s-api.boletera"
+
+# ─── Tailscale + Flannel ─────────────────────────────────────────────
+# Flannel encapsula en VXLAN (UDP 8472) por esta interfaz y calcula solo
+# el MTU de los pods: MTU de tailscale0 (1280) - 50 de VXLAN = 1230.
+ts_iface: "tailscale0"
+
+# ─── Runtime de contenedores ─────────────────────────────────────────
+docker_repo_baseurl: "https://download.docker.com/linux/rhel/$releasever/$basearch/stable"
+docker_repo_gpgkey: "https://download.docker.com/linux/rhel/gpg"
+
+# ─── Roles de los workers ────────────────────────────────────────────
+# Cada worker declara los suyos en inventario.ini (boletera_roles=...).
+# El playbook 04 exige que cada rol de esta lista tenga al menos un
+# worker; si no, los pods de ese rol quedarían en Pending.
+#   app      → tienda (frontend, eventos, órdenes, reservaciones),
+#              PostgreSQL, Traefik, Argo CD
+#   logs     → OpenSearch + Dashboards, Jaeger
+#   metricas → Prometheus, Grafana, Alertmanager, builds de Tekton
+roles_validos: [app, logs, metricas]
+
+# ─── NFS (vive en el control plane, en un SEGUNDO disco) ─────────────
+# 20 GB bastan: guarda PostgreSQL y datos chicos de la tienda. OpenSearch
+# y Prometheus usan local-path en el disco de su propio worker.
+# Las VMs de VMware usan discos NVMe: el segundo disco suele ser nvme0n2.
+# Revisa el nombre real con `lsblk` antes de correr el playbook.
+nfs_disk: "/dev/nvme0n2"
+nfs_mount: "/srv/nfs"
+nfs_export_dir: "/srv/nfs/k8s"

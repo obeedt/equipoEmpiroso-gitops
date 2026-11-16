@@ -1,0 +1,7 @@
+---
+# Clúster completo en orden. Para correr solo una parte:
+#   ansible-playbook 01-prerequisitos.yml
+- import_playbook: 01-prerequisitos.yml
+- import_playbook: 02-nfs.yml
+- import_playbook: 03-control-plane.yml
+- import_playbook: 04-workers.yml

@@ -1,0 +1,115 @@
+---
+# ─────────────────────────────────────────────────────────────────────
+# 03 · kubeadm init + Flannel (VXLAN sobre Tailscale)
+#   Se ejecuta en el control plane (conexión local).
+# ─────────────────────────────────────────────────────────────────────
+- name: Control plane
+  hosts: control_plane
+  become: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+  tasks:
+    - name: ¿El clúster ya fue inicializado?
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: admin_conf
+
+    # Sin esto, kubeadm buscaría "la versión estable" en internet y
+    # podría no coincidir con el kubelet instalado.
+    - name: Versión exacta de kubeadm instalada
+      ansible.builtin.command: kubeadm version -o short
+      register: kubeadm_ver
+      changed_when: false
+
+    - name: Guardar versión
+      ansible.builtin.set_fact:
+        k8s_full_version: "{{ kubeadm_ver.stdout }}"
+
+    - name: Configuración de kubeadm
+      ansible.builtin.template:
+        src: templates/kubeadm-init.yaml.j2
+        dest: /root/kubeadm-init.yaml
+        mode: "0600"
+
+    - name: kubeadm init
+      ansible.builtin.command: kubeadm init --config /root/kubeadm-init.yaml
+      when: not admin_conf.stat.exists
+      register: kinit
+      changed_when: true
+
+    - name: Guardar salida de kubeadm init (útil para la documentación)
+      ansible.builtin.copy:
+        content: "{{ kinit.stdout }}"
+        dest: /root/kubeadm-init.log
+        mode: "0600"
+      when: kinit is changed
+
+    - name: Directorio ~/.kube de root
+      ansible.builtin.file:
+        path: /root/.kube
+        state: directory
+        mode: "0700"
+
+    - name: kubeconfig para root
+      ansible.builtin.copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: true
+        mode: "0600"
+
+    # ── Flannel: VXLAN por tailscale0 ─────────────────────────────────
+    # Es el CNI que se usó en la clase. Comparado con Calico sobre Tailscale:
+    #  - VXLAN va por UDP 8472, que las ACL de Tailscale sí dejan pasar.
+    #  - Calcula solo el MTU de los pods a partir de tailscale0.
+    #  - No usa las marcas de netfilter en las que Calico choca con Tailscale.
+    #  - No aplica NetworkPolicy (el proyecto no la pide).
+    - name: Manifiesto de Flannel {{ flannel_version }} (con --iface={{ ts_iface }})
+      ansible.builtin.template:
+        src: templates/kube-flannel.yml.j2
+        dest: /root/kube-flannel.yml
+        mode: "0644"
+
+    - name: Aplicar Flannel
+      ansible.builtin.command: kubectl apply -f /root/kube-flannel.yml
+      register: flannel_apply
+      changed_when: "flannel_apply.stdout_lines | reject('search', 'unchanged') | list | length > 0"
+
+    - name: Esperar a que Flannel arranque (la 1a vez descarga las imágenes)
+      ansible.builtin.command: kubectl -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=300s
+      changed_when: false
+
+    - name: Esperar a que el control plane esté Ready
+      ansible.builtin.command: kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=300s
+      changed_when: false
+
+    # Las comillas simples evitan que Ansible quite las comillas dobles
+    # del filtro de jsonpath al separar los argumentos.
+    - name: Confirmar que el nodo se registró con su IP de Tailscale
+      ansible.builtin.command: >-
+        kubectl get node {{ inventory_hostname }}
+        -o 'jsonpath={.status.addresses[?(@.type=="InternalIP")].address}'
+      register: node_ip
+      changed_when: false
+      failed_when: node_ip.stdout != ansible_host
+
+    - name: Confirmar que Flannel encapsula por la IP de Tailscale
+      ansible.builtin.command: >-
+        kubectl get node {{ inventory_hostname }}
+        -o 'jsonpath={.metadata.annotations.flannel\.alpha\.coreos\.com/public-ip}'
+      register: flannel_ip
+      changed_when: false
+      failed_when: flannel_ip.stdout != ansible_host
+
+    - name: Leer el MTU que calculó Flannel
+      ansible.builtin.slurp:
+        src: /run/flannel/subnet.env
+      register: subnet_env
+
+    - name: El MTU de los pods debe ser el de tailscale0 menos 50 (VXLAN)
+      ansible.builtin.assert:
+        that:
+          - flannel_mtu | int == (ansible_facts[ts_iface].mtu | int) - 50
+        fail_msg: "Flannel calculó MTU {{ flannel_mtu }}; se esperaba {{ (ansible_facts[ts_iface].mtu | int) - 50 }}"
+      vars:
+        flannel_mtu: "{{ subnet_env.content | b64decode | regex_search('FLANNEL_MTU=(\\d+)', '\\1') | first }}"

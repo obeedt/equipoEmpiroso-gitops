@@ -1,0 +1,148 @@
+---
+# ─────────────────────────────────────────────────────────────────────
+# 04 · Unir los workers y etiquetarlos
+# ─────────────────────────────────────────────────────────────────────
+- name: Token de unión (en el control plane)
+  hosts: control_plane
+  become: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  tasks:
+    # Se revisa antes de unir nada: un rol sin worker deja sus pods en
+    # Pending y un rol mal escrito no lo usaría ningún nodeSelector.
+    - name: Los roles de cada worker son válidos
+      ansible.builtin.assert:
+        that: mis_roles | difference(roles_validos) | length == 0
+        fail_msg: >-
+          {{ item }} tiene roles desconocidos: {{ mis_roles | difference(roles_validos) }}.
+          Válidos: {{ roles_validos }} (revisa boletera_roles en inventario.ini)
+        quiet: true
+      loop: "{{ groups['workers'] }}"
+      vars:
+        mis_roles: "{{ (hostvars[item].boletera_roles | default('')).split(',') | map('trim') | select | list }}"
+
+    - name: Cada rol tiene al menos un worker
+      ansible.builtin.assert:
+        that: roles_validos | difference(asignados) | length == 0
+        fail_msg: "Ningún worker tiene el rol {{ roles_validos | difference(asignados) }} (revisa boletera_roles en inventario.ini)"
+        quiet: true
+      vars:
+        asignados: >-
+          {{ (groups['workers'] | map('extract', hostvars) | map(attribute='boletera_roles', default='') | join(',')).split(',')
+             | map('trim') | select | unique | list }}
+
+    # Es un token temporal que no cambia el estado del clúster; por eso no
+    # cuenta como "changed" y la 2a corrida de site.yml puede dar changed=0.
+    - name: Crear token temporal (30 min)
+      ansible.builtin.command: kubeadm token create --ttl 30m --print-join-command
+      register: join_cmd
+      changed_when: false
+
+    - name: Extraer token y hash de la CA
+      ansible.builtin.set_fact:
+        join_token: "{{ join_cmd.stdout | regex_search('--token\\s+(\\S+)', '\\1') | first }}"
+        join_ca_hash: "{{ join_cmd.stdout | regex_search('--discovery-token-ca-cert-hash\\s+(\\S+)', '\\1') | first }}"
+
+- name: Unir workers
+  hosts: workers
+  become: true
+  tasks:
+    - name: ¿Este worker ya está unido?
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: El worker resuelve el API server por nombre
+      ansible.builtin.command: "getent hosts {{ k8s_api_name }}"
+      changed_when: false
+
+    - name: El worker alcanza el puerto 6443 del control plane por Tailscale
+      ansible.builtin.wait_for:
+        host: "{{ k8s_api_name }}"
+        port: 6443
+        timeout: 15
+
+    - name: Configuración de join
+      ansible.builtin.template:
+        src: templates/kubeadm-join.yaml.j2
+        dest: /root/kubeadm-join.yaml
+        mode: "0600"
+      when: not kubelet_conf.stat.exists
+
+    - name: kubeadm join
+      ansible.builtin.command: kubeadm join --config /root/kubeadm-join.yaml
+      when: not kubelet_conf.stat.exists
+      changed_when: true
+
+    - name: Borrar el archivo con el token (ya no sirve y no debe quedar)
+      ansible.builtin.file:
+        path: /root/kubeadm-join.yaml
+        state: absent
+
+- name: Etiquetas y verificación (en el control plane)
+  hosts: control_plane
+  become: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  tasks:
+    # node-role.../worker: para que `kubectl get nodes` muestre el rol.
+    # boletera.io/<rol>=true: lo que usan los nodeSelector del repo GitOps,
+    #   p. ej. OpenSearch con  nodeSelector: {boletera.io/logs: "true"}.
+    #   Los roles que el worker ya NO tiene se quitan ("boletera.io/<rol>-"),
+    #   así que mover un rol de nodo es: editar el inventario y correr 04.
+    # boletera.io/zona: solo informativa (dónde vive la VM).
+    - name: Etiquetar workers (rol de nodo, roles de la boletera y zona)
+      ansible.builtin.command: >-
+        kubectl label node {{ item }} --overwrite
+        node-role.kubernetes.io/worker=
+        boletera.io/zona={{ hostvars[item].zona }}
+        {% for r in roles_validos %}boletera.io/{{ r }}{{ '=true' if r in mis_roles else '-' }} {% endfor %}
+      loop: "{{ groups['workers'] }}"
+      vars:
+        mis_roles: "{{ (hostvars[item].boletera_roles | default('')).split(',') | map('trim') | select | list }}"
+      register: etiquetas
+      changed_when: "'not labeled' not in etiquetas.stdout"
+
+    - name: Etiquetar zona del control plane
+      ansible.builtin.command: >-
+        kubectl label node {{ inventory_hostname }} --overwrite
+        boletera.io/zona={{ zona }}
+      register: etiqueta_cp
+      changed_when: "'not labeled' not in etiqueta_cp.stdout"
+
+    - name: Esperar a que Flannel corra en todos los nodos
+      ansible.builtin.command: kubectl -n kube-flannel rollout status daemonset/kube-flannel-ds --timeout=600s
+      changed_when: false
+
+    - name: Esperar a que todos los nodos estén Ready
+      ansible.builtin.command: kubectl wait --for=condition=Ready nodes --all --timeout=600s
+      changed_when: false
+
+    - name: Cada nodo se registró con su IP de Tailscale
+      ansible.builtin.command: >-
+        kubectl get node {{ item }}
+        -o 'jsonpath={.status.addresses[?(@.type=="InternalIP")].address}'
+      loop: "{{ groups['k8s'] }}"
+      register: ips
+      changed_when: false
+      failed_when: ips.stdout != hostvars[item].ansible_host
+
+    - name: Flannel de cada nodo encapsula por su IP de Tailscale
+      ansible.builtin.command: >-
+        kubectl get node {{ item }}
+        -o 'jsonpath={.metadata.annotations.flannel\.alpha\.coreos\.com/public-ip}'
+      loop: "{{ groups['k8s'] }}"
+      register: flannel_ips
+      changed_when: false
+      failed_when: flannel_ips.stdout != hostvars[item].ansible_host
+
+    - name: Estado final
+      ansible.builtin.command: >-
+        kubectl get nodes -o wide -L boletera.io/zona
+        {% for r in roles_validos %}-L boletera.io/{{ r }} {% endfor %}
+      register: nodos
+      changed_when: false
+
+    - name: Nodos
+      ansible.builtin.debug:
+        var: nodos.stdout_lines

@@ -1,0 +1,99 @@
+---
+# ─────────────────────────────────────────────────────────────────────
+# 02 · Servidor NFS en el control plane (segundo disco)
+#   El StorageClass NFS del proyecto apunta aquí.
+#   SEGURIDAD: solo formatea el disco si NO tiene ningún sistema de
+#   archivos. Si ya tiene uno, lo respeta y solo lo monta.
+# ─────────────────────────────────────────────────────────────────────
+- name: Servidor NFS
+  hosts: nfs_server
+  become: true
+
+  tasks:
+    - name: El disco para NFS existe
+      ansible.builtin.stat:
+        path: "{{ nfs_disk }}"
+      register: disco
+
+    - name: Detener si el disco no existe
+      ansible.builtin.assert:
+        that: disco.stat.exists and disco.stat.isblk
+        fail_msg: >-
+          {{ nfs_disk }} no existe. Agrega un segundo disco virtual a la VM del
+          control plane, revisa su nombre con `lsblk` y ajusta nfs_disk en group_vars/all.yml.
+
+    - name: ¿El disco ya tiene sistema de archivos?
+      ansible.builtin.command: "blkid -o value -s TYPE {{ nfs_disk }}"
+      register: fs_tipo
+      failed_when: false
+      changed_when: false
+
+    - name: Formatear en XFS (solo si está vacío)
+      ansible.builtin.command: "mkfs.xfs {{ nfs_disk }}"
+      when: fs_tipo.stdout | length == 0
+      changed_when: true
+
+    - name: UUID del disco
+      ansible.builtin.command: "blkid -o value -s UUID {{ nfs_disk }}"
+      register: fs_uuid
+      changed_when: false
+
+    - name: Punto de montaje
+      ansible.builtin.file:
+        path: "{{ nfs_mount }}"
+        state: directory
+        mode: "0755"
+
+    - name: Montaje persistente en /etc/fstab (por UUID, no por /dev/sdX)
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '\s{{ nfs_mount }}\s'
+        line: "UUID={{ fs_uuid.stdout }}  {{ nfs_mount }}  xfs  defaults  0 0"
+      register: fstab
+
+    - name: Montar
+      ansible.builtin.command: mount -a  # noqa: command-instead-of-module (mount está en ansible.posix, no en builtin)
+      when: fstab.changed
+      changed_when: true
+
+    - name: Verificar que realmente quedó montado
+      ansible.builtin.command: "findmnt {{ nfs_mount }}"
+      changed_when: false
+
+    - name: Directorio exportado
+      ansible.builtin.file:
+        path: "{{ nfs_export_dir }}"
+        state: directory
+        mode: "0755"
+
+    # Solo los nodos del inventario (por su IP de Tailscale), no toda la tailnet: con
+    # no_root_squash, cualquier otro equipo de la tailnet podría montarlo
+    # como root. no_root_squash: el provisioner y PostgreSQL hacen chown.
+    - name: Exportación NFS (solo hacia los nodos del clúster)
+      ansible.builtin.copy:
+        dest: /etc/exports.d/k8s.exports
+        content: |
+          {{ nfs_export_dir }} {% for h in groups['k8s'] %} {{ hostvars[h].ansible_host }}(rw,sync,no_subtree_check,no_root_squash){% endfor %}
+
+        mode: "0644"
+      register: exports
+
+    - name: Servidor NFS habilitado
+      ansible.builtin.service:
+        name: nfs-server
+        state: started
+        enabled: true
+
+    - name: Recargar exportaciones
+      ansible.builtin.command: exportfs -ra
+      when: exports.changed
+      changed_when: true
+
+    - name: Mostrar lo exportado
+      ansible.builtin.command: exportfs -v
+      register: exportfs_v
+      changed_when: false
+
+    - name: Exportaciones activas
+      ansible.builtin.debug:
+        var: exportfs_v.stdout_lines

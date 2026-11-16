@@ -1,0 +1,245 @@
+---
+# ─────────────────────────────────────────────────────────────────────
+# 01 · Prerrequisitos de Kubernetes en todos los nodos
+#   Solo módulos ansible.builtin (igual que en la clase).
+#   Idempotente: la 2a corrida debe dar changed=0 (salvo el reload de
+#   firewalld, que se marca como ok).
+# ─────────────────────────────────────────────────────────────────────
+- name: Prerrequisitos de Kubernetes (todos los nodos)
+  hosts: k8s
+  become: true
+
+  handlers:
+    - name: Recargar sysctl
+      ansible.builtin.command: sysctl --system
+      changed_when: false
+
+    - name: Reiniciar containerd
+      ansible.builtin.service:
+        name: containerd
+        state: restarted
+
+    - name: Recargar NetworkManager
+      ansible.builtin.service:
+        name: NetworkManager
+        state: reloaded
+
+    - name: Recargar firewalld
+      ansible.builtin.command: firewall-cmd --reload
+      changed_when: false
+
+  tasks:
+    # ── Validaciones: si algo de esto falla, NO seguimos ──────────────
+    - name: La IP del inventario debe ser de Tailscale (100.64.0.0/10)
+      ansible.builtin.assert:
+        that:
+          - ansible_host is match('^100\.')
+          - ts_iface in ansible_facts.interfaces
+        fail_msg: >-
+          {{ inventory_hostname }}: ansible_host debe ser la IP de Tailscale y
+          la interfaz {{ ts_iface }} debe existir. ¿Corriste 00-tailscale-bootstrap.sh?
+
+    - name: La IP de tailscale0 coincide con la del inventario
+      ansible.builtin.assert:
+        that:
+          - ansible_facts[ts_iface].ipv4.address == ansible_host
+        fail_msg: >-
+          tailscale0 tiene {{ ansible_facts[ts_iface].ipv4.address | default('nada') }}
+          pero el inventario dice {{ ansible_host }}.
+
+    # ── Nombre y resolución ───────────────────────────────────────────
+    - name: Hostname igual al nombre del inventario
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: /etc/hosts con los nodos (IP Tailscale) y el nombre del API server
+      ansible.builtin.blockinfile:
+        path: /etc/hosts
+        marker: "# {mark} K8S BOLETERA (Ansible)"
+        block: |
+          {% for h in groups['k8s'] %}
+          {{ hostvars[h].ansible_host }}  {{ h }}
+          {% endfor %}
+          {{ hostvars[groups['control_plane'][0]].ansible_host }}  {{ k8s_api_name }}
+
+    # ── Swap (kubelet no arranca con swap activo) ─────────────────────
+    - name: Apagar swap ahora
+      ansible.builtin.command: swapoff -a
+      when: ansible_facts.swaptotal_mb | int > 0
+      changed_when: true
+
+    - name: Comentar swap en /etc/fstab (no vuelve al reiniciar)
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\sswap\s.*)$'
+        replace: '# \1'
+
+    # ── Paquetes base ─────────────────────────────────────────────────
+    - name: Paquetes base (incluye cliente NFS, que usa el kubelet para montar PVCs)
+      ansible.builtin.dnf:
+        name:
+          - nfs-utils
+          - iproute-tc
+          - tar
+          - jq
+        state: present
+
+    # ── Kernel: módulos y sysctl ──────────────────────────────────────
+    - name: Módulos de kernel al arrancar
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: |
+          overlay
+          br_netfilter
+          vxlan
+        mode: "0644"
+
+    # ansible-core no trae un módulo modprobe (está en community.general)
+    - name: Cargar módulos ahora (modprobe)
+      ansible.builtin.command: "modprobe {{ item }}"
+      loop: [overlay, br_netfilter, vxlan]
+      changed_when: false
+
+    - name: Parámetros de kernel (Kubernetes + OpenSearch + Fluent Bit)
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/99-kubernetes.conf
+        content: |
+          # Kubernetes
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.ipv4.ip_forward                 = 1
+          # OpenSearch: no arranca con el valor por defecto (65530)
+          vm.max_map_count = 262144
+          # Fluent Bit / muchos pods vigilando archivos de log
+          fs.inotify.max_user_instances = 512
+          fs.inotify.max_user_watches   = 524288
+        mode: "0644"
+      notify: Recargar sysctl
+
+    # ── SELinux en permissive (igual que tu clúster de clase) ─────────
+    - name: SELinux permissive en caliente
+      ansible.builtin.command: setenforce 0
+      when: ansible_facts.selinux.status == 'enabled' and ansible_facts.selinux.mode == 'enforcing'
+      changed_when: true
+
+    - name: SELinux permissive persistente
+      ansible.builtin.lineinfile:
+        path: /etc/selinux/config
+        regexp: '^SELINUX='
+        line: 'SELINUX=permissive'
+
+    # ── NetworkManager no debe tocar las interfaces de Flannel ────────
+    - name: NetworkManager ignora interfaces de Flannel
+      ansible.builtin.copy:
+        dest: /etc/NetworkManager/conf.d/flannel.conf
+        content: |
+          [keyfile]
+          unmanaged-devices=interface-name:cni0;interface-name:flannel.1;interface-name:veth*
+        mode: "0644"
+      notify: Recargar NetworkManager
+
+    # ── firewalld: confiamos en el túnel, no en la LAN ────────────────
+    # Todo el tráfico entre nodos (API 6443, kubelet 10250, VXLAN de Flannel
+    # 8472/udp, NFS 2049) viaja por tailscale0, que ya va cifrado y filtrado
+    # por las ACL de Tailscale. La interfaz física sigue en la zona "public".
+    # cni0 y flannel.1 en trusted: es el arreglo del troubleshooting de la
+    # clase 1 ("DNS interno falla → agregarlas a la zona trusted").
+    - name: tailscale0, interfaces de Flannel y redes del clúster en la zona trusted
+      ansible.builtin.command: "firewall-cmd --permanent --zone=trusted {{ item }}"
+      loop:
+        - "--add-interface={{ ts_iface }}"
+        - "--add-interface=cni0"
+        - "--add-interface=flannel.1"
+        - "--add-source={{ pod_cidr }}"
+        - "--add-source={{ svc_cidr }}"
+      register: fw_trusted
+      changed_when: "'ALREADY' not in fw_trusted.stderr"
+      notify: Recargar firewalld
+
+    - name: Puerto UDP de Tailscale (ayuda a lograr conexión directa en vez de relay)
+      ansible.builtin.command: firewall-cmd --permanent --zone=public --add-port=41641/udp
+      register: fw_ts
+      changed_when: "'ALREADY' not in fw_ts.stderr"
+      notify: Recargar firewalld
+
+    # ── containerd ────────────────────────────────────────────────────
+    - name: Repositorio de Docker (de ahí sale containerd.io)
+      ansible.builtin.yum_repository:
+        name: docker-ce-stable
+        description: Docker CE Stable
+        baseurl: "{{ docker_repo_baseurl }}"
+        gpgkey: "{{ docker_repo_gpgkey }}"
+        gpgcheck: true
+
+    - name: Instalar containerd {{ containerd_version }}
+      ansible.builtin.dnf:
+        name: "containerd.io-{{ containerd_version }}"
+        state: present
+
+    - name: ¿El config de containerd ya tiene SystemdCgroup = true?
+      ansible.builtin.command: grep -q 'SystemdCgroup = true' /etc/containerd/config.toml
+      register: cgroup_ok
+      failed_when: false
+      changed_when: false
+
+    # El config.toml que trae containerd.io deshabilita el plugin CRI
+    # (disabled_plugins = ["cri"]) → Kubernetes no podría usarlo.
+    # Regeneramos el config por defecto (versión 3 en containerd 2.x).
+    - name: Regenerar config por defecto de containerd
+      ansible.builtin.shell: containerd config default > /etc/containerd/config.toml
+      when: cgroup_ok.rc != 0
+      changed_when: true
+      notify: Reiniciar containerd
+
+    - name: Cgroup driver systemd (debe coincidir con el kubelet)
+      ansible.builtin.replace:
+        path: /etc/containerd/config.toml
+        regexp: 'SystemdCgroup = false'
+        replace: 'SystemdCgroup = true'
+      notify: Reiniciar containerd
+
+    - name: crictl apuntando a containerd
+      ansible.builtin.copy:
+        dest: /etc/crictl.yaml
+        content: |
+          runtime-endpoint: unix:///run/containerd/containerd.sock
+          image-endpoint: unix:///run/containerd/containerd.sock
+        mode: "0644"
+
+    - name: containerd habilitado
+      ansible.builtin.service:
+        name: containerd
+        state: started
+        enabled: true
+
+    - name: Aplicar reinicios pendientes antes de verificar
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verificar que containerd quedó con SystemdCgroup = true
+      ansible.builtin.shell: containerd config dump | grep -q 'SystemdCgroup = true'
+      changed_when: false
+
+    # ── kubeadm, kubelet, kubectl ─────────────────────────────────────
+    - name: Repositorio oficial de Kubernetes v{{ k8s_minor }}
+      ansible.builtin.yum_repository:
+        name: kubernetes
+        description: Kubernetes
+        baseurl: "https://pkgs.k8s.io/core:/stable:/v{{ k8s_minor }}/rpm/"
+        gpgkey: "https://pkgs.k8s.io/core:/stable:/v{{ k8s_minor }}/rpm/repodata/repomd.xml.key"
+        gpgcheck: true
+        # Evita que un `dnf update` cualquiera cambie la versión del clúster
+        exclude: kubelet kubeadm kubectl cri-tools kubernetes-cni
+
+    - name: Instalar kubelet, kubeadm y kubectl {{ k8s_version }}
+      ansible.builtin.dnf:
+        name:
+          - "kubelet-{{ k8s_version }}"
+          - "kubeadm-{{ k8s_version }}"
+          - "kubectl-{{ k8s_version }}"
+        state: present
+        disable_excludes: kubernetes
+
+    - name: kubelet habilitado (reinicia en bucle hasta kubeadm init/join; es normal)
+      ansible.builtin.service:
+        name: kubelet
+        enabled: true

@@ -1,0 +1,51 @@
+# Generado por Ansible — no editar a mano
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress: "{{ ansible_host }}"     # IP de Tailscale del control plane
+  bindPort: 6443
+nodeRegistration:
+  name: "{{ inventory_hostname }}"
+  criSocket: "unix:///run/containerd/containerd.sock"
+  kubeletExtraArgs:
+    - name: node-ip                          # el kubelet se anuncia con su IP de Tailscale
+      value: "{{ ansible_host }}"
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: "{{ k8s_full_version }}"
+clusterName: boletera
+# Los workers se conectan a un NOMBRE (resuelto en /etc/hosts), no a una IP.
+# Si un día cambia la IP del control plane, solo se edita /etc/hosts.
+controlPlaneEndpoint: "{{ k8s_api_name }}:6443"
+apiServer:
+  certSANs:
+    - "{{ k8s_api_name }}"
+    - "{{ ansible_host }}"
+    - "{{ inventory_hostname }}"
+    - "127.0.0.1"
+networking:
+  podSubnet: "{{ pod_cidr }}"
+  serviceSubnet: "{{ svc_cidr }}"
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+# Memoria apartada para el sistema operativo y el propio kubelet.
+# Sin esto, OpenSearch o un build de Kaniko pueden consumir toda la RAM
+# del worker y congelar la VM entera, en vez de que Kubernetes desaloje
+# un pod de forma controlada. kubeadm guarda esta configuración en el
+# ConfigMap kubelet-config, así que también la reciben los workers al unirse.
+systemReserved:
+  memory: "512Mi"
+  cpu: "200m"
+kubeReserved:
+  memory: "256Mi"
+  cpu: "100m"
+# Al definir evictionHard se reemplazan TODOS los valores por defecto,
+# por eso se listan los cuatro.
+evictionHard:
+  memory.available: "300Mi"
+  nodefs.available: "10%"
+  nodefs.inodesFree: "5%"
+  imagefs.available: "15%"
