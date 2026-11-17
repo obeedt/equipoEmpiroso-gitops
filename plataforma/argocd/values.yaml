@@ -1,0 +1,21 @@
+# Argo CD v3.6.1 · chart argo/argo-cd 10.18.0
+# Se instala a mano una sola vez (bootstrap). Después, todo lo demás lo instala Argo CD desde Git.
+
+global:
+  # Todos los componentes de Argo CD en el worker con el rol "app" (k8s-w1)
+  nodeSelector:
+    boletera.io/app: "true"
+
+configs:
+  params:
+    # Sin TLS propio: más adelante Traefik pondrá el Ingress.
+    # Mientras tanto se entra por port-forward, solo dentro de Tailscale.
+    server.insecure: true
+
+# Sin inicio de sesión con GitHub/Google (SSO): ahorra memoria
+dex:
+  enabled: false
+
+# Las notificaciones de Argo CD no se usan (las alertas van por Alertmanager → Telegram)
+notifications:
+  enabled: false
