@@ -4,6 +4,7 @@ k8s_minor: "1.37"            # rama del repositorio pkgs.k8s.io
 k8s_version: "1.37.2"        # paquetes kubelet/kubeadm/kubectl exactos
 containerd_version: "2.4.2"  # containerd.io del repositorio de Docker
 flannel_version: "v0.28.10"  # manifiesto en templates/kube-flannel.yml.j2
+helm_version: "v4.3.1"       # solo en el control plane (instala Argo CD)
 
 # ─── Redes del clúster ───────────────────────────────────────────────
 pod_cidr: "10.244.0.0/16"    # la misma red que usa Flannel por defecto

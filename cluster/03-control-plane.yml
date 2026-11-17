@@ -21,6 +21,7 @@
       ansible.builtin.command: kubeadm version -o short
       register: kubeadm_ver
       changed_when: false
+      check_mode: false   # solo lee; así --check calcula bien la plantilla
 
     - name: Guardar versión
       ansible.builtin.set_fact:
@@ -57,6 +58,46 @@
         dest: /root/.kube/config
         remote_src: true
         mode: "0600"
+
+    # ── Herramientas para la etapa GitOps (solo en el control plane) ──
+    # git:  clonar el repo GitOps para el bootstrap de Argo CD.
+    # Helm: instalar Argo CD, lo único que se instala a mano; todo lo demás
+    #       lo instala Argo CD desde Git. Los workers no necesitan ninguno:
+    #       Argo CD y Tekton traen su propio git dentro de sus pods.
+    - name: git
+      ansible.builtin.dnf:
+        name: git
+        state: present
+
+    - name: ¿Helm {{ helm_version }} ya está instalado?
+      ansible.builtin.command: /usr/local/bin/helm version --short
+      register: helm_actual
+      changed_when: false
+      failed_when: false
+      check_mode: false   # solo lee
+
+    - name: Instalar Helm {{ helm_version }} (binario oficial, verificando su SHA-256)
+      when: helm_actual.rc != 0 or not helm_actual.stdout.startswith(helm_version)
+      block:
+        - name: Descargar Helm {{ helm_version }}
+          ansible.builtin.get_url:
+            url: "https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz"
+            checksum: "sha256:https://get.helm.sh/helm-{{ helm_version }}-linux-amd64.tar.gz.sha256sum"
+            dest: "/tmp/helm-{{ helm_version }}-linux-amd64.tar.gz"
+            mode: "0644"
+
+        - name: Extraer Helm
+          ansible.builtin.unarchive:
+            src: "/tmp/helm-{{ helm_version }}-linux-amd64.tar.gz"
+            dest: /tmp
+            remote_src: true
+
+        - name: Helm en /usr/local/bin
+          ansible.builtin.copy:
+            src: /tmp/linux-amd64/helm
+            dest: /usr/local/bin/helm
+            remote_src: true
+            mode: "0755"
 
     # ── Flannel: VXLAN por tailscale0 ─────────────────────────────────
     # Es el CNI que se usó en la clase. Comparado con Calico sobre Tailscale:

@@ -27,6 +27,7 @@
       register: fs_tipo
       failed_when: false
       changed_when: false
+      check_mode: false   # solo lee; así --check no cree que el disco está vacío
 
     - name: Formatear en XFS (solo si está vacío)
       ansible.builtin.command: "mkfs.xfs {{ nfs_disk }}"
@@ -37,6 +38,7 @@
       ansible.builtin.command: "blkid -o value -s UUID {{ nfs_disk }}"
       register: fs_uuid
       changed_when: false
+      check_mode: false   # solo lee
 
     - name: Punto de montaje
       ansible.builtin.file:

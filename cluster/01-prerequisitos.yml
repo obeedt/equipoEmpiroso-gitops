@@ -28,6 +28,11 @@
       ansible.builtin.command: firewall-cmd --reload
       changed_when: false
 
+    # Aplica el cambio de DNS sin tirar la red (no corta SSH ni Tailscale)
+    - name: Aplicar DNS
+      ansible.builtin.command: "nmcli device reapply {{ ansible_facts.default_ipv4.interface }}"
+      changed_when: true
+
   tasks:
     # ── Validaciones: si algo de esto falla, NO seguimos ──────────────
     - name: La IP del inventario debe ser de Tailscale (100.64.0.0/10)
@@ -61,6 +66,45 @@
           {{ hostvars[h].ansible_host }}  {{ h }}
           {% endfor %}
           {{ hostvars[groups['control_plane'][0]].ansible_host }}  {{ k8s_api_name }}
+
+    # ── DNS del nodo ──────────────────────────────────────────────────
+    # Tailscale descarta todo lo que llega de 100.64.0.0/10 por una interfaz
+    # que no sea tailscale0. Si el DHCP (p. ej. el de izzi) da DNS en ese
+    # rango, el nodo y los pods se quedan sin DNS al instalar Tailscale.
+    - name: Ningún DNS del nodo puede estar en 100.64.0.0/10 (rango de Tailscale)
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.dns.nameservers | default([]) | select('match', cgnat_regex) | list | length == 0
+        fail_msg: >-
+          {{ inventory_hostname }} usa DNS en el rango de Tailscale:
+          {{ ansible_facts.dns.nameservers | select('match', cgnat_regex) | list }}.
+          Fija DNS públicos con nmcli (ver docs/01-cluster-desde-cero.md, sección 10).
+      vars:
+        cgnat_regex: '^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.'
+
+    # Los pods heredan el "search" del nodo. Con ndots:5, antes de buscar
+    # github.com prueban github.com.<dominio>, y el DNS del NAT de VMware
+    # tarda ~5 s en contestar que "localdomain" no existe; Argo CD se rinde
+    # a los 15 s. Se quita el dominio que da el DHCP y se conservan los
+    # mismos servidores DNS. Si el nodo no tiene "search", no hace nada.
+    - name: Conexión de NetworkManager de la interfaz principal
+      ansible.builtin.command: "nmcli -g GENERAL.CONNECTION device show {{ ansible_facts.default_ipv4.interface }}"
+      register: nm_con
+      changed_when: false
+      check_mode: false   # solo lee
+      when: ansible_facts.dns.search | default([]) | length > 0
+
+    - name: Quitar el dominio de búsqueda del DHCP (mismos servidores DNS)
+      ansible.builtin.command: >-
+        nmcli con mod "{{ nm_con.stdout }}"
+        ipv4.ignore-auto-dns yes ipv6.ignore-auto-dns yes
+        ipv4.dns "{{ dns_ipv4 | join(',') }}"
+      vars:
+        dns_ipv4: "{{ ansible_facts.dns.nameservers | default([]) | select('match', '^[0-9.]+$') | list }}"
+      when: ansible_facts.dns.search | default([]) | length > 0
+      failed_when: dns_ipv4 | length == 0
+      changed_when: true
+      notify: Aplicar DNS
 
     # ── Swap (kubelet no arranca con swap activo) ─────────────────────
     - name: Apagar swap ahora

@@ -38,7 +38,9 @@
       register: join_cmd
       changed_when: false
 
+    # En --check el token no se crea; no hay nada que extraer
     - name: Extraer token y hash de la CA
+      when: join_cmd is not skipped
       ansible.builtin.set_fact:
         join_token: "{{ join_cmd.stdout | regex_search('--token\\s+(\\S+)', '\\1') | first }}"
         join_ca_hash: "{{ join_cmd.stdout | regex_search('--discovery-token-ca-cert-hash\\s+(\\S+)', '\\1') | first }}"

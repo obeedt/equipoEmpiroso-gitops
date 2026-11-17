@@ -22,7 +22,7 @@ idempotente. Los pasos exactos para reproducirlo están en el
 7. [Máquinas virtuales en Proxmox (servidor)](#7-máquinas-virtuales-en-proxmox-servidor)
 8. [Después de instalar Rocky Linux](#8-después-de-instalar-rocky-linux)
 9. [La red entre nodos: Tailscale](#9-la-red-entre-nodos-tailscale)
-10. [Por qué se cambió el DNS de los nodos de Proxmox](#10-por-qué-se-cambió-el-dns-de-los-nodos-de-proxmox)
+10. [Por qué se cambió el DNS de los nodos](#10-por-qué-se-cambió-el-dns-de-los-nodos)
 11. [Red de pods: Flannel en vez de Calico](#11-red-de-pods-flannel-en-vez-de-calico)
 12. [El MTU: Tailscale y Flannel](#12-el-mtu-tailscale-y-flannel)
 13. [Preparación con el script 00](#13-preparación-con-el-script-00)
@@ -74,6 +74,7 @@ flowchart LR
 | CoreDNS / etcd | v1.14.6 / 3.7.0 | los elige kubeadm 1.37.2 |
 | Tailscale | 1.104.7 | versión estable al instalar |
 | ansible-core | 2.16.16 | paquete de Rocky 10 |
+| Helm (solo control plane) | v4.3.1 | `group_vars/all.yml` → `helm_version` |
 
 ---
 
@@ -442,9 +443,13 @@ firewalld bloquea el tráfico de los pods hacia CoreDNS.
 
 ---
 
-## 10. Por qué se cambió el DNS de los nodos de Proxmox
+## 10. Por qué se cambió el DNS de los nodos
 
-### 10.1 El problema
+Hubo dos problemas de DNS distintos: uno en los nodos de Proxmox (10.1–10.2) y
+otro en los de VMware (10.3). Desde la sección 10.4, el playbook 01 revisa y
+corrige ambos.
+
+### 10.1 Proxmox: los DNS del proveedor caen en el rango de Tailscale
 
 k8s-w2 y k8s-w3 recibían por DHCP los DNS del proveedor de internet (izzi):
 
@@ -473,7 +478,7 @@ prevención. El resultado, de no hacerlo, habría sido este:
 2. Sin DNS, `dnf` no instala paquetes y containerd no descarga imágenes.
 3. CoreDNS reenvía las consultas externas al DNS del nodo, así que **los pods también** se quedarían sin resolver nombres de internet.
 
-### 10.2 La solución
+### 10.2 La solución en Proxmox
 
 Antes de instalar Tailscale se fijaron DNS públicos en esos dos nodos, ignorando
 los que manda el DHCP:
@@ -486,9 +491,77 @@ sudo nmcli con up ens18
 Para comprobarlo: `/etc/resolv.conf` solo muestra `1.1.1.1` y `8.8.8.8`, y
 `getent hosts pkgs.k8s.io` responde.
 
-**Por qué no en la laptop:** k8s-cp y k8s-w1 usan el DNS del NAT de VMware
-(`192.168.87.2`), que no está en el rango de Tailscale. Ahí no hizo falta cambiar
-nada.
+k8s-cp y k8s-w1 no tienen este problema: usan el DNS del NAT de VMware
+(`192.168.87.2`), que no está en el rango de Tailscale. Pero tenían otro.
+
+### 10.3 VMware: el dominio de búsqueda `localdomain`
+
+**Síntoma.** Al instalar Argo CD, la Application `root` sí leyó el repositorio
+de GitHub, pero `namespaces`, que lee el mismo repositorio, se quedó con
+`SYNC STATUS` vacío (`Unknown`) y este error:
+
+```
+failed to list refs: Get "https://github.com/obeedt/equipoEmpiroso-gitops.git/info/refs?service=git-upload-pack":
+context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+```
+
+Argo CD esperó 15 segundos a GitHub y se rindió.
+
+**Causa.** El DHCP de VMware les da a k8s-cp y k8s-w1 un dominio de búsqueda:
+
+```
+search localdomain
+nameserver 192.168.87.2
+```
+
+Los pods heredan ese `search` del nodo donde corren, y Kubernetes les pone
+`options ndots:5`. Con eso, para buscar `github.com` (que tiene menos de 5
+puntos) un pod de Argo CD en k8s-w1 prueba primero con cada dominio de
+búsqueda:
+
+```
+search argocd.svc.cluster.local svc.cluster.local cluster.local localdomain
+nameserver 10.96.0.10
+options ndots:5
+```
+
+| Nombre que prueba | Quién contesta | Tiempo |
+|---|---|---|
+| `github.com.argocd.svc.cluster.local` | CoreDNS: no existe | inmediato |
+| `github.com.svc.cluster.local` | CoreDNS: no existe | inmediato |
+| `github.com.cluster.local` | CoreDNS: no existe | inmediato |
+| `github.com.localdomain` | DNS de VMware: no existe | **5,154 ms** |
+| `github.com` | DNS de VMware | 93 ms |
+
+Esos tiempos se midieron en k8s-w1 con `getent hosts`. Cada búsqueda se hace
+para IPv4 y para IPv6, así que una sola consulta puede pasar de los 15 s de
+Argo CD. A veces funciona porque CoreDNS guarda las respuestas 30 segundos;
+por eso `root` sí pasó y `namespaces` no.
+
+No es solo un problema de Argo CD: cualquier pod en k8s-w1 sufriría esos 5 s en
+cada nombre de internet (los microservicios, Tekton al clonar, las descargas
+de imágenes).
+
+**Solución.** Se conserva el DNS de VMware, que funciona en cualquier red donde
+esté la laptop, y solo se quita el dominio de búsqueda automático:
+
+```bash
+sudo nmcli con mod ens160 ipv4.ignore-auto-dns yes ipv4.dns 192.168.87.2
+sudo nmcli device reapply ens160      # aplica sin tirar la red
+kubectl -n argocd rollout restart deployment argocd-repo-server   # los pods viejos conservan su resolv.conf
+```
+
+Después, `/etc/resolv.conf` solo tiene `nameserver 192.168.87.2` y la
+Application `namespaces` pasó a **Synced / Healthy**.
+
+### 10.4 Lo que hace el playbook 01
+
+Para que una reinstalación no repita ninguno de los dos problemas, el playbook
+01 ahora, en cada nodo:
+
+1. **Se detiene** si algún DNS del nodo está en `100.64.0.0/10`, con un mensaje que apunta a esta sección. Ese caso (10.1) se arregla antes de instalar Tailscale, así que no se corrige solo.
+2. Si `/etc/resolv.conf` tiene una línea `search`, ejecuta en la conexión de NetworkManager de la interfaz principal `ipv4.ignore-auto-dns yes` e `ipv6.ignore-auto-dns yes`, y fija **los mismos servidores DNS** que ya tenía. Luego aplica el cambio con `nmcli device reapply`.
+3. Si el nodo ya no tiene `search`, como en Proxmox o en una segunda corrida, no hace nada. Así se mantiene `changed=0`.
 
 ---
 
@@ -701,6 +774,7 @@ cd ~/k8s-boletera-flannel && ansible-playbook site.yml     # sin sudo
 |---|---|
 | Comprobar que `ansible_host` es de Tailscale y coincide con `tailscale0` | Detiene la instalación antes de romper algo si el inventario está mal. |
 | `/etc/hosts` con los 4 nodos y `k8s-api.boletera` | Resolución por nombre sin depender de un DNS externo. |
+| DNS del nodo: ninguno en `100.64.0.0/10` y sin dominio de búsqueda del DHCP | Sección 10. |
 | Swap apagada y comentada en `/etc/fstab` | Refuerzo, aunque ya se instaló sin swap. |
 | Paquetes: `nfs-utils`, `iproute-tc`, `tar`, `jq` | `nfs-utils` lo usa el kubelet para montar los volúmenes NFS. |
 | Módulos `overlay`, `br_netfilter`, `vxlan` | El sistema de archivos de los contenedores, el filtrado del tráfico de los bridges y el túnel de Flannel. |
@@ -730,8 +804,9 @@ cd ~/k8s-boletera-flannel && ansible-playbook site.yml     # sin sudo
    - Reservas de memoria y CPU del kubelet (sección 4.3). kubeadm las guarda en el ConfigMap `kubelet-config`, y los workers las reciben al unirse.
    - `kubernetesVersion` = la versión exacta de kubeadm instalado. Sin esto, kubeadm buscaría en internet "la última estable", que podría no coincidir.
 2. Kubeconfig para root (`/root/.kube/config`).
-3. Instala Flannel y espera a que arranque.
-4. **Comprueba** que el nodo se registró con su IP de Tailscale, que Flannel encapsula por esa IP y que el MTU es el de `tailscale0` − 50.
+3. Instala **git** y **Helm v4.3.1** (solo en el control plane). Son las herramientas para instalar Argo CD: git clona el repo GitOps y Helm instala el chart. Helm se descarga del sitio oficial (`get.helm.sh`) y se **verifica su SHA-256** antes de instalarlo; si ya está la versión correcta, no se toca. Los workers no necesitan ninguno de los dos: Argo CD y Tekton traen su propio git dentro de sus pods.
+4. Instala Flannel y espera a que arranque.
+5. **Comprueba** que el nodo se registró con su IP de Tailscale, que Flannel encapsula por esa IP y que el MTU es el de `tailscale0` − 50.
 
 ### 04 · Workers
 
@@ -791,6 +866,28 @@ k8s-w2   : ok=29  changed=0  unreachable=0  failed=0  skipped=5  rescued=0  igno
 k8s-w3   : ok=29  changed=0  unreachable=0  failed=0  skipped=5  rescued=0  ignored=0
 ```
 
+Esa corrida es del 15 de noviembre, antes de agregar el ajuste de DNS (sección
+10.4) y git/Helm (sección 15). Con esas tareas nuevas los números de `ok`
+cambian, pero `changed` debe seguir en 0.
+
+Después de esos cambios se comprobó con una **corrida de prueba**
+(`ansible-playbook --check site.yml`), que calcula qué cambiaría sin tocar
+nada:
+
+```
+PLAY RECAP
+k8s-cp   : ok=48  changed=0  unreachable=0  failed=0  skipped=34
+k8s-w1   : ok=23  changed=0  unreachable=0  failed=0  skipped=14
+k8s-w2   : ok=23  changed=0  unreachable=0  failed=0  skipped=14
+k8s-w3   : ok=23  changed=0  unreachable=0  failed=0  skipped=14
+```
+
+Para que `--check` diera resultados correctos, los comandos que **solo leen**
+(`kubeadm version`, `helm version`, `blkid`, `nmcli -g`) llevan
+`check_mode: false`, así que también corren en la prueba. Sin eso, Ansible no
+los ejecuta, sus resultados quedan vacíos y la prueba reporta cambios falsos.
+El token de unión no se crea en `--check`, así que tampoco se intenta extraer.
+
 `changed=0` en los 4 nodos confirma que los playbooks describen un **estado**,
 no una lista de comandos. Se pueden volver a correr sin riesgo, por ejemplo
 para agregar un nodo o cambiar un rol. Los `skipped` son los pasos que solo
@@ -826,6 +923,8 @@ corren la primera vez (`kubeadm init`, `join`, formatear el disco NFS).
 | 7 | La llave SSH quedó en root | Los comandos de la sección 14.2 se corrieron como root | Rehacerlo como `ansible` y quitar la llave de root (sección 14.2). |
 | 8 | Laptop ↔ Proxmox por el relay de Dallas | firewalld bloqueaba 41641/udp | Abrir el puerto en el playbook 01 (sección 9.4). |
 | 9 | `kubectl` como `ansible` → `localhost:8080 connection refused` | Solo root tenía kubeconfig | Copiar `admin.conf` a `~/.kube/config` (sección 15). |
+| 10 | Argo CD: Application `namespaces` en `Unknown`, `context deadline exceeded` al leer GitHub | Los pods en los nodos de VMware heredaban `search localdomain`, y el DNS de VMware tarda 5 s en rechazar `github.com.localdomain` | Quitar el dominio de búsqueda del DHCP en k8s-cp y k8s-w1; ahora lo hace el playbook 01 (sección 10.3). |
+| 11 | git y Helm instalados a mano en el control plane para el bootstrap de Argo CD | No eran parte de la instalación | Ahora los instala el playbook 03, con Helm verificado por SHA-256 (sección 15). |
 
 ---
 
