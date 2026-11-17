@@ -1,5 +1,8 @@
 # local-path-provisioner v0.0.37 (Rancher)
-# Lo instala Argo CD desde el repositorio de Rancher: apps/local-path.yaml
+# Lo instala Argo CD (apps/local-path.yaml) con el chart copiado en ./chart
+# (etiqueta v0.0.37, commit 49b2be8, sin modificar; licencia en ./chart/LICENSE).
+# Para actualizarlo: reemplazar ./chart por la carpeta deploy/chart/local-path-provisioner
+# de la nueva etiqueta y cambiar helperImage/versión aquí si hace falta.
 #
 # StorageClass "local-path": el volumen es una carpeta en el disco del
 # propio worker. Más rápido que NFS y sin pasar por la red; lo usan

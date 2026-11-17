@@ -20,6 +20,8 @@ ts_iface: "tailscale0"
 # ─── Runtime de contenedores ─────────────────────────────────────────
 docker_repo_baseurl: "https://download.docker.com/linux/rhel/$releasever/$basearch/stable"
 docker_repo_gpgkey: "https://download.docker.com/linux/rhel/gpg"
+# Espejo de Docker Hub (de Google): containerd lo intenta antes que Docker Hub
+docker_hub_mirror: "https://mirror.gcr.io"
 
 # ─── Roles de los workers ────────────────────────────────────────────
 # Cada worker declara los suyos en inventario.ini (boletera_roles=...).

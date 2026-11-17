@@ -242,6 +242,39 @@
         replace: 'SystemdCgroup = true'
       notify: Reiniciar containerd
 
+    # ── Espejo de Docker Hub ──────────────────────────────────────────
+    # Para descargar de Docker Hub hay que pedir un token a auth.docker.io,
+    # que vive en Cloudflare. Si Cloudflare no responde desde la red de
+    # casa o de la escuela, ninguna imagen de Docker Hub baja. Con el
+    # espejo de Google (mirror.gcr.io), containerd intenta primero ahí y,
+    # si falla, va directo a Docker Hub. También evita el límite de
+    # descargas anónimas de Docker Hub.
+    # containerd lee la carpeta de configuración de registros desde dos
+    # plugins (CRI y transfer); se activa en ambos.
+    - name: containerd lee la configuración de registros de /etc/containerd/certs.d
+      ansible.builtin.replace:
+        path: /etc/containerd/config.toml
+        regexp: "^(\\s*)config_path = ''\\s*$"
+        replace: "\\1config_path = '/etc/containerd/certs.d'"
+      notify: Reiniciar containerd
+
+    - name: Carpeta de configuración de docker.io
+      ansible.builtin.file:
+        path: /etc/containerd/certs.d/docker.io
+        state: directory
+        mode: "0755"
+
+    - name: docker.io → primero el espejo, después Docker Hub
+      ansible.builtin.copy:
+        dest: /etc/containerd/certs.d/docker.io/hosts.toml
+        content: |
+          # Generado por Ansible (01-prerequisitos.yml)
+          server = "https://registry-1.docker.io"
+
+          [host."{{ docker_hub_mirror }}"]
+            capabilities = ["pull", "resolve"]
+        mode: "0644"
+
     - name: crictl apuntando a containerd
       ansible.builtin.copy:
         dest: /etc/crictl.yaml
@@ -261,6 +294,10 @@
 
     - name: Verificar que containerd quedó con SystemdCgroup = true
       ansible.builtin.shell: containerd config dump | grep -q 'SystemdCgroup = true'
+      changed_when: false
+
+    - name: Verificar que containerd usa /etc/containerd/certs.d
+      ansible.builtin.shell: containerd config dump | grep -q "config_path = '/etc/containerd/certs.d'"
       changed_when: false
 
     # ── kubeadm, kubelet, kubectl ─────────────────────────────────────

@@ -7,3 +7,6 @@ admin.conf
 .env
 *secret*.yaml
 !*sealed*secret*.yaml
+# Plantilla del chart de local-path (no contiene datos; solo genera un
+# Secret si se configura un registro privado, y aquí no se usa)
+!plataforma/local-path/chart/templates/registry-secret.yaml

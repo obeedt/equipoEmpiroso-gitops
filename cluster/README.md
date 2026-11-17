@@ -146,7 +146,7 @@ Sobre el clúster ya instalado debe dar `changed=0` y `failed=0`.
 
 ## Qué valida cada paso
 
-- **01:** que cada nodo tenga su IP de Tailscale, que ningún DNS del nodo esté en el rango de Tailscale (`100.64.0.0/10`) y que containerd quede con `SystemdCgroup = true`. Además quita el dominio de búsqueda que pone el DHCP (en VMware, `localdomain`), que hacía que cada consulta de un pod a internet tardara 5 s.
+- **01:** que cada nodo tenga su IP de Tailscale, que ningún DNS del nodo esté en el rango de Tailscale (`100.64.0.0/10`) y que containerd quede con `SystemdCgroup = true`. Además quita el dominio de búsqueda que pone el DHCP (en VMware, `localdomain`), que hacía que cada consulta de un pod a internet tardara 5 s. Configura containerd para descargar las imágenes de Docker Hub por el **espejo de Google** (`mirror.gcr.io`), con Docker Hub directo como respaldo.
 - **02:** que el disco NFS quede montado (solo formatea un disco **vacío**) y lo exporta solo a los nodos del inventario.
 - **03:** que Flannel arranque, que el nodo se registre con su IP de Tailscale, que Flannel encapsule por esa IP y que el MTU de los pods sea el de `tailscale0` − 50. También instala en el control plane **git** y **Helm**, que se usan para instalar Argo CD.
 - **04:** antes de unir nada, que los roles del inventario sean válidos y que cada rol tenga al menos un worker; después, que los 4 nodos estén `Ready`, que cada uno use su IP de Tailscale (kubelet y Flannel) y que tenga sus etiquetas de rol.
@@ -159,6 +159,7 @@ Sobre el clúster ya instalado debe dar `changed=0` y `failed=0`.
 | Rocky Linux | 10.2 | instalación de las VMs |
 | Kubernetes (kubelet, kubeadm, kubectl) | 1.37.2 | `group_vars/all.yml` → `k8s_version` |
 | containerd.io | 2.4.2 | `group_vars/all.yml` → `containerd_version` |
+| Espejo de Docker Hub | `https://mirror.gcr.io` | `group_vars/all.yml` → `docker_hub_mirror` |
 | Flannel | v0.28.10 | `templates/kube-flannel.yml.j2` (manifiesto oficial) |
 | Helm (solo control plane) | v4.3.1 | `group_vars/all.yml` → `helm_version` |
 | git (solo control plane) | el de Rocky 10 | `03-control-plane.yml` |

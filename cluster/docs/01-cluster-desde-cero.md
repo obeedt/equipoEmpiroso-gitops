@@ -488,8 +488,21 @@ sudo nmcli con mod ens18 ipv4.ignore-auto-dns yes ipv4.dns "1.1.1.1 8.8.8.8" ipv
 sudo nmcli con up ens18
 ```
 
-Para comprobarlo: `/etc/resolv.conf` solo muestra `1.1.1.1` y `8.8.8.8`, y
+Para comprobarlo: `/etc/resolv.conf` solo muestra esos dos servidores, y
 `getent hosts pkgs.k8s.io` responde.
+
+**Cambio posterior: `8.8.8.8` y `9.9.9.9`.** Una noche Cloudflare dejó de
+responder desde la red de la casa (sección 15.1). Como `1.1.1.1` es de
+Cloudflare y era el primer DNS, cada consulta esperaba 5 s a que fallara antes
+de pasar a `8.8.8.8` (medido: 5,032 ms). Se cambió a dos proveedores
+distintos, ninguno de Cloudflare: Google (`8.8.8.8`) y Quad9 (`9.9.9.9`).
+
+```bash
+sudo nmcli con mod ens18 ipv4.dns "8.8.8.8 9.9.9.9"
+sudo nmcli device reapply ens18
+```
+
+Después del cambio: 29–44 ms por consulta.
 
 k8s-cp y k8s-w1 no tienen este problema: usan el DNS del NAT de VMware
 (`192.168.87.2`), que no está en el rango de Tailscale. Pero tenían otro.
@@ -785,7 +798,55 @@ cd ~/k8s-boletera-flannel && ansible-playbook site.yml     # sin sudo
 | NetworkManager no toca `cni0`, `flannel.1`, `veth*` | Sección 11.3. |
 | firewalld: zonas `trusted` y puerto 41641/udp | Secciones 9.4 y 9.5. |
 | containerd **2.4.2** del repositorio de Docker | El `config.toml` que trae deshabilita el plugin CRI; se regenera el de por defecto y se pone `SystemdCgroup = true`, para que containerd y el kubelet usen el mismo administrador de cgroups (systemd). |
+| containerd: **espejo de Docker Hub** (`mirror.gcr.io`) | Las imágenes de Docker Hub se piden primero al espejo de Google y, si falla, a Docker Hub. Ver la sección 15.1. |
 | kubelet, kubeadm y kubectl **1.37.2** exactos | El repositorio de Kubernetes queda con `exclude`, para que un `dnf update` cualquiera no cambie la versión del clúster. |
+
+### 15.1 El espejo de Docker Hub
+
+**Síntoma.** Al instalar Traefik con Argo CD, su pod se quedó en
+`ImagePullBackOff`:
+
+```
+failed to fetch anonymous token: Get "https://auth.docker.io/token?...":
+dial tcp 104.18.43.178:443: i/o timeout
+```
+
+**Causa.** Para descargar una imagen de Docker Hub, containerd primero pide un
+permiso (token) a `auth.docker.io`, que está detrás de **Cloudflare**. Esa
+noche, desde la red de la casa, ninguna dirección de Cloudflare respondía: ni
+`auth.docker.io`, ni `hub.docker.com`, ni `cloudflare.com`, ni `1.1.1.1`. Fallaba
+igual desde Windows, desde las VMs de la laptop y desde las de Proxmox. En
+cambio GitHub, ghcr.io, quay.io y registry.k8s.io sí respondían. Era un problema
+de la red externa, no del clúster, pero bastaba para que ninguna imagen de
+Docker Hub (Traefik, busybox, local-path-provisioner) se pudiera descargar.
+
+**Solución.** Google mantiene un espejo público de Docker Hub
+(`mirror.gcr.io`) que no pasa por Cloudflare. El playbook 01 configura
+containerd en los 4 nodos así:
+
+1. En `/etc/containerd/config.toml`, `config_path = '/etc/containerd/certs.d'`
+   en los dos plugins que descargan imágenes (CRI y *transfer*).
+2. `/etc/containerd/certs.d/docker.io/hosts.toml`:
+
+   ```toml
+   server = "https://registry-1.docker.io"
+
+   [host."https://mirror.gcr.io"]
+     capabilities = ["pull", "resolve"]
+   ```
+
+   containerd intenta primero los `[host]` de la lista y, si fallan, el
+   `server` (Docker Hub directo).
+3. Reinicia containerd. Los contenedores que ya corren **no se detienen**.
+
+**Prueba antes de aplicarlo.** En k8s-w1 se descargaron
+`busybox:1.37.0` y `rancher/local-path-provisioner:v0.0.37` con
+`ctr --hosts-dir` y ese mismo `hosts.toml`, en un namespace de containerd
+aparte que Kubernetes no ve: 6 s cada una, con Cloudflare caído. Sin el espejo,
+la misma descarga no avanzaba.
+
+**Ventaja extra.** Docker Hub limita las descargas anónimas por IP. Con el
+espejo, Tekton y los microservicios no chocan con ese límite durante la demo.
 
 ### 02 · Servidor NFS (control plane)
 
@@ -925,6 +986,8 @@ corren la primera vez (`kubeadm init`, `join`, formatear el disco NFS).
 | 9 | `kubectl` como `ansible` → `localhost:8080 connection refused` | Solo root tenía kubeconfig | Copiar `admin.conf` a `~/.kube/config` (sección 15). |
 | 10 | Argo CD: Application `namespaces` en `Unknown`, `context deadline exceeded` al leer GitHub | Los pods en los nodos de VMware heredaban `search localdomain`, y el DNS de VMware tarda 5 s en rechazar `github.com.localdomain` | Quitar el dominio de búsqueda del DHCP en k8s-cp y k8s-w1; ahora lo hace el playbook 01 (sección 10.3). |
 | 11 | git y Helm instalados a mano en el control plane para el bootstrap de Argo CD | No eran parte de la instalación | Ahora los instala el playbook 03, con Helm verificado por SHA-256 (sección 15). |
+| 12 | Traefik en `ImagePullBackOff`: `auth.docker.io ... i/o timeout` | Cloudflare (donde está el servicio de tokens de Docker Hub) no respondía desde la red de casa | Espejo de Docker Hub `mirror.gcr.io` en containerd, configurado por el playbook 01 (sección 15.1). |
+| 13 | Nodos de Proxmox: cada consulta DNS tardaba 5 s | Su primer DNS era `1.1.1.1` (Cloudflare), que no respondía | DNS `8.8.8.8` y `9.9.9.9`, ninguno de Cloudflare (sección 10.2). |
 
 ---
 

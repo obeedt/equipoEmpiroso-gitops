@@ -11,7 +11,7 @@ Application de Argo CD en [`apps/`](../apps/).
 | [`traefik/`](traefik/) | **Ingress controller**: escucha en el puerto 80 de k8s-w1 | Traefik v3.7.17 · chart 42.2.0 | `traefik` |
 | [`nfs/`](nfs/) | Driver CSI de NFS (aprovisionamiento dinámico) | csi-driver-nfs 4.13.6 | `nfs-csi` |
 | [`storageclasses/`](storageclasses/) | StorageClass **`nfs`** (predeterminado) | — | `storageclasses` |
-| [`local-path/`](local-path/) | StorageClass **`local-path`** (disco de cada worker) | local-path-provisioner v0.0.37 | `local-path` |
+| [`local-path/`](local-path/) | StorageClass **`local-path`** (disco de cada worker). El chart está copiado en `local-path/chart/` (ver abajo). | local-path-provisioner v0.0.37 | `local-path` |
 
 ## StorageClasses
 
@@ -19,6 +19,27 @@ Application de Argo CD en [`apps/`](../apps/).
 |---|---|---|---|
 | `nfs` (predeterminado) | `/srv/nfs/k8s/<namespace>-<pvc>` en k8s-cp | los datos lo siguen | PostgreSQL |
 | `local-path` | `/opt/local-path-provisioner` en el worker | los datos **no** lo siguen | OpenSearch, Prometheus |
+
+### Por qué el chart de local-path está copiado en este repo
+
+Rancher no publica un repositorio de Helm para local-path-provisioner. Al
+principio Argo CD leía el chart directo de su GitHub, pero para eso clonaba el
+repositorio completo de Rancher (historial y dependencias de Go) y se rendía
+por tiempo (`context deadline exceeded`).
+
+Por eso `local-path/chart/` es una copia **sin modificar** de
+`deploy/chart/local-path-provisioner` en la etiqueta `v0.0.37`
+(commit `49b2be8`), con su licencia Apache 2.0 en `local-path/chart/LICENSE`.
+Nuestra configuración va aparte, en `local-path/values.yaml`. Para actualizar
+de versión se reemplaza la carpeta `chart/` por la de la etiqueta nueva.
+
+## Imágenes de Docker Hub
+
+Traefik, local-path-provisioner y busybox vienen de Docker Hub. Los nodos las
+descargan por el espejo de Google (`mirror.gcr.io`), configurado en containerd
+por el playbook 01 del clúster. Así no dependen de Cloudflare ni del límite de
+descargas de Docker Hub. Ver `cluster/docs/01-cluster-desde-cero.md`,
+sección 15.1.
 
 ## Acceso por Ingress
 
