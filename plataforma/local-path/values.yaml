@@ -1,0 +1,33 @@
+# local-path-provisioner v0.0.37 (Rancher)
+# Lo instala Argo CD desde el repositorio de Rancher: apps/local-path.yaml
+#
+# StorageClass "local-path": el volumen es una carpeta en el disco del
+# propio worker. Más rápido que NFS y sin pasar por la red; lo usan
+# OpenSearch (rol logs) y Prometheus (rol metricas). Si el pod se mueve
+# de nodo, sus datos NO lo siguen.
+
+storageClass:
+  create: true
+  name: local-path
+  defaultClass: false             # el predeterminado es "nfs"
+  reclaimPolicy: Delete
+  # El volumen se crea en el nodo donde se programe el pod, no antes
+  volumeBindingMode: WaitForFirstConsumer
+
+# Pod auxiliar que crea y borra las carpetas de los volúmenes.
+# El chart usa busybox:latest; se fija una versión para que no cambie sola.
+helperImage:
+  repository: docker.io/library/busybox
+  tag: "1.37.0"
+
+nodePathMap:
+  - node: DEFAULT_PATH_FOR_NON_LISTED_NODES
+    paths:
+      - /opt/local-path-provisioner
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi

@@ -1,0 +1,57 @@
+# Traefik (Ingress controller) · chart traefik/traefik 42.2.0
+# Lo instala Argo CD: apps/traefik.yaml
+
+# El chart 42.2.0 trae Traefik v3.7.16; se usa v3.7.17 (30 oct 2026),
+# que corrige el aviso de seguridad GHSA-xv5x-242w-7hf7.
+image:
+  tag: v3.7.17
+
+# Un solo Traefik, en el worker con el rol "app" (k8s-w1)
+deployment:
+  kind: Deployment
+  replicas: 1
+
+nodeSelector:
+  boletera.io/app: "true"
+
+# Traefik escucha directo en el puerto 80 del nodo (hostPort).
+# Se entra por la IP de Tailscale de k8s-w1: http://<app>.100.103.221.107.nip.io
+ports:
+  web:
+    hostPort: 80
+
+# Con hostPort, el pod nuevo no puede arrancar mientras el viejo ocupa el
+# puerto 80 del mismo nodo. Por eso, al actualizar, primero se detiene el
+# viejo (maxUnavailable 1) y no se crea uno extra (maxSurge 0).
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0
+
+# Sin LoadBalancer: en este clúster no hay quien le asigne una IP externa.
+service:
+  spec:
+    type: ClusterIP
+
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+  name: traefik
+
+providers:
+  kubernetesIngress:
+    enabled: true
+    # Los Ingress anuncian la IP de Tailscale de k8s-w1 como su dirección.
+    # Así `kubectl get ingress` la muestra y Argo CD los marca como Healthy.
+    publishedService:
+      enabled: false
+    ingressEndpoint:
+      ip: "100.103.221.107"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    memory: 256Mi

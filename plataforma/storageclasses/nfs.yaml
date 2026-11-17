@@ -1,0 +1,19 @@
+# StorageClass por defecto: volúmenes en el servidor NFS del control plane
+# (disco de 20 GB en /srv/nfs, exportado solo a los 4 nodos).
+# Lo usa PostgreSQL: si el pod se mueve de nodo, sus datos lo siguen.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: 100.108.78.119          # IP de Tailscale de k8s-cp
+  share: /srv/nfs/k8s
+  # Una carpeta por volumen: <namespace>-<nombre del PVC>
+  subDir: ${pvc.metadata.namespace}-${pvc.metadata.name}
+  # Al borrar el PVC, la carpeta se renombra (archived-...) en vez de borrarse
+  onDelete: archive
+reclaimPolicy: Delete
+volumeBindingMode: Immediate

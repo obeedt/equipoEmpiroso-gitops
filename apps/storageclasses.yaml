@@ -1,0 +1,18 @@
+# StorageClasses propios (por ahora, "nfs")
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: storageclasses
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/obeedt/equipoEmpiroso-gitops.git
+    targetRevision: main
+    path: plataforma/storageclasses
+  destination:
+    server: https://kubernetes.default.svc
+  syncPolicy:
+    automated:
+      # Sin prune: borrar un StorageClass por error no debe tocar volúmenes
+      selfHeal: true

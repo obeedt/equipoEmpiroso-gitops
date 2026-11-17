@@ -1,0 +1,21 @@
+# Driver CSI de NFS · chart csi-driver-nfs 4.13.6 (imágenes v4.13.6)
+# Lo instala Argo CD: apps/nfs-csi.yaml
+# El StorageClass "nfs" está aparte: plataforma/storageclasses/nfs.yaml
+
+controller:
+  replicas: 1
+  # El controlador crea y borra las carpetas de cada volumen en el NFS
+  nodeSelector:
+    boletera.io/app: "true"
+
+# El DaemonSet "csi-nfs-node" corre en TODOS los nodos (los volúmenes se
+# montan en el nodo donde corre cada pod). Su configuración por defecto ya
+# tolera el taint del control plane.
+
+# El chart no crea StorageClass; lo definimos nosotros en Git.
+storageClass:
+  create: false
+
+# Sin snapshots de volúmenes (no se usan en el proyecto)
+externalSnapshotter:
+  enabled: false

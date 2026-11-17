@@ -1,0 +1,20 @@
+# Acceso a la interfaz de Argo CD por Traefik (sin port-forward).
+# Argo CD sirve HTTP (configs.params.server.insecure en plataforma/argocd/values.yaml).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: argocd.100.103.221.107.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80

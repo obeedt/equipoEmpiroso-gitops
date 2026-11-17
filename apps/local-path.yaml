@@ -1,0 +1,30 @@
+# local-path-provisioner · volúmenes en el disco de cada worker
+# Rancher no publica un repositorio de Helm: el chart se lee de su repo
+# de GitHub, fijado a la etiqueta v0.0.37.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: local-path
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/rancher/local-path-provisioner.git
+      targetRevision: v0.0.37
+      path: deploy/chart/local-path-provisioner
+      helm:
+        releaseName: local-path-provisioner
+        valueFiles:
+          - $values/plataforma/local-path/values.yaml
+    - repoURL: https://github.com/obeedt/equipoEmpiroso-gitops.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: local-path-storage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
