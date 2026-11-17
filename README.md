@@ -25,12 +25,21 @@ El código de los microservicios y el pipeline de Tekton están en
 
 | Etapa | Estado |
 |---|---|
-| Clúster de 4 nodos | ✅ Listo · [documentación](cluster/docs/01-cluster-desde-cero.md) |
-| Argo CD, Ingress y StorageClasses | Pendiente |
+| 1 · Clúster de 4 nodos | ✅ Listo · [documentación](cluster/docs/01-cluster-desde-cero.md) |
+| 2 · Argo CD (app-of-apps) | ✅ Listo · [documentación](docs/02-argocd.md) |
+| 3 · Ingress y StorageClasses | ✅ Listo · [documentación](docs/03-ingress-y-almacenamiento.md) |
 | Base de datos y tienda | Pendiente |
 | CI con Tekton | Pendiente |
 | Monitoreo y alertas | Pendiente |
 | Logs y trazas | Pendiente |
+
+## Accesos
+
+Solo desde equipos conectados a la tailnet del equipo:
+
+| Aplicación | URL |
+|---|---|
+| Argo CD | http://argocd.100.103.221.107.nip.io |
 
 ## Equipo
 
