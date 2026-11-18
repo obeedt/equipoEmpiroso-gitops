@@ -1,0 +1,19 @@
+# frontend · el sitio web de la boletera (http://tienda.100.103.221.107.nip.io)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: frontend
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/obeedt/equipoEmpiroso-gitops.git
+    targetRevision: main
+    path: tienda/frontend
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tienda
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

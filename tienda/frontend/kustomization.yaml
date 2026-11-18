@@ -1,0 +1,22 @@
+# frontend · el sitio web de la boletera · Argo CD lo aplica (apps/frontend.yaml)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tienda
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: boletera
+    includeSelectors: false
+
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+# Versión desplegada = SHA corto del commit en equipoEmpiroso-app.
+# Tekton cambia esta línea en cada build; Argo CD despliega el cambio.
+images:
+  - name: docker.io/obeedt/devops-frontend
+    newTag: d7a1e75

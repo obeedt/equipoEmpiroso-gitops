@@ -1,0 +1,19 @@
+# La tienda: http://tienda.100.103.221.107.nip.io (Traefik en k8s-w1, por Tailscale).
+# Solo el frontend se expone; los otros servicios son internos.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tienda
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: tienda.100.103.221.107.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

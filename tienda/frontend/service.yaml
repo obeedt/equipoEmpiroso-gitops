@@ -1,0 +1,14 @@
+# Lo usa el Ingress de la tienda. Prometheus leerá /metrics por el puerto "http".
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels:
+    app.kubernetes.io/name: frontend
+spec:
+  selector:
+    app.kubernetes.io/name: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
