@@ -1,0 +1,19 @@
+# svc-reservaciones · carrito: bloqueo temporal de asientos
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: svc-reservaciones
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/obeedt/equipoEmpiroso-gitops.git
+    targetRevision: main
+    path: tienda/svc-reservaciones
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tienda
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -1,0 +1,15 @@
+# Interno: lo usa el frontend en http://svc-reservaciones (namespace tienda).
+# Prometheus leerá /metrics por el puerto "http" (ServiceMonitor, etapa de monitoreo).
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-reservaciones
+  labels:
+    app.kubernetes.io/name: svc-reservaciones
+spec:
+  selector:
+    app.kubernetes.io/name: svc-reservaciones
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

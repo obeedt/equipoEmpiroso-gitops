@@ -1,0 +1,21 @@
+# svc-ordenes · pago de reservaciones y pedidos · Argo CD lo aplica (apps/svc-ordenes.yaml)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tienda
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: boletera
+    includeSelectors: false
+
+resources:
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Versión desplegada = SHA corto del commit en equipoEmpiroso-app.
+# Tekton cambia esta línea en cada build; Argo CD despliega el cambio.
+images:
+  - name: docker.io/obeedt/devops-ordenes
+    newTag: 2219e3a

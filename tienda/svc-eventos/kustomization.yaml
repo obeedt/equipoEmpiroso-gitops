@@ -18,4 +18,4 @@ resources:
 # Tekton cambia esta línea en cada build; Argo CD despliega el cambio.
 images:
   - name: docker.io/obeedt/devops-eventos
-    newTag: 3878c93
+    newTag: 2219e3a
