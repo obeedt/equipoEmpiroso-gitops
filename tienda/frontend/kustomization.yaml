@@ -19,4 +19,4 @@ resources:
 # Tekton cambia esta línea en cada build; Argo CD despliega el cambio.
 images:
   - name: docker.io/obeedt/devops-frontend
-    newTag: d7a1e75
+    newTag: 3283aff

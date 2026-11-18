@@ -18,4 +18,4 @@ resources:
 # Tekton cambia esta línea en cada build; Argo CD despliega el cambio.
 images:
   - name: docker.io/obeedt/devops-reservaciones
-    newTag: 2219e3a
+    newTag: 3283aff
