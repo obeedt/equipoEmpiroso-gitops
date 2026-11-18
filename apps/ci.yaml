@@ -1,0 +1,34 @@
+# CI de la boletera: Tasks, Pipeline y Triggers (namespace ci)
+#
+# El documento del proyecto pide que las Tasks, el Pipeline, el TriggerTemplate
+# y el EventListener vivan en el repo de la aplicación (equipoEmpiroso-app/tekton).
+# Esta Application los lee de ahí, así que también se despliegan por GitOps.
+# Solo se aplica la carpeta tekton/ (no sus subcarpetas: manual/ es para
+# lanzar ejecuciones a mano).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ci
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/obeedt/equipoEmpiroso-app.git
+    targetRevision: main
+    path: tekton
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ci
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # Task, Pipeline, EventListener...: sus CRDs las instalan otras
+      # Applications (tekton-pipelines y tekton-triggers)
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

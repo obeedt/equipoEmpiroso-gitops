@@ -12,6 +12,7 @@ Application de Argo CD en [`apps/`](../apps/).
 | [`nfs/`](nfs/) | Driver CSI de NFS (aprovisionamiento dinámico) | csi-driver-nfs 4.13.6 | `nfs-csi` |
 | [`storageclasses/`](storageclasses/) | StorageClass **`nfs`** (predeterminado) | — | `storageclasses` |
 | [`local-path/`](local-path/) | StorageClass **`local-path`** (disco de cada worker). El chart está copiado en `local-path/chart/` (ver abajo). | local-path-provisioner v0.0.37 | `local-path` |
+| [`tekton/`](tekton/) | **CI**: Tekton Pipelines, Triggers y Dashboard (solo lectura) en k8s-w3 | v1.18.0 · v0.37.2 · v0.74.0 | `tekton-pipelines`, `tekton-triggers`, `tekton-dashboard` |
 
 ## StorageClasses
 
@@ -49,5 +50,6 @@ Traefik escucha en el puerto 80 de **k8s-w1**, por su IP de Tailscale
 | Aplicación | URL |
 |---|---|
 | Argo CD | http://argocd.100.103.221.107.nip.io |
+| Tekton Dashboard (solo lectura) | http://tekton.100.103.221.107.nip.io |
 
 Solo se abre desde equipos conectados a la tailnet.

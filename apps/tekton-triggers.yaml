@@ -1,0 +1,44 @@
+# Tekton Triggers + interceptores · namespace tekton-pipelines
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tekton-triggers
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/obeedt/equipoEmpiroso-gitops.git
+    targetRevision: main
+    path: plataforma/tekton/triggers
+  destination:
+    server: https://kubernetes.default.svc
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions: [".webhooks"]
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions: [".webhooks"]
+    - group: triggers.tekton.dev
+      kind: ClusterInterceptor
+      jqPathExpressions: [".spec.clientConfig.caBundle"]
+    - kind: Secret
+      namespace: tekton-pipelines
+      name: triggers-webhook-certs
+      jqPathExpressions: [".data"]
+    - kind: Secret
+      namespace: tekton-pipelines
+      name: tekton-triggers-core-interceptors-certs
+      jqPathExpressions: [".data"]
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true
+      # Los ClusterInterceptor usan una CRD que llega en la misma sincronización
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

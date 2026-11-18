@@ -23,6 +23,10 @@ Es el único `kubectl apply` del proyecto, y `root` se excluye a sí misma.
 | [`svc-reservaciones.yaml`](svc-reservaciones.yaml) | `svc-reservaciones` | Carrito: bloqueo temporal de asientos | `tienda/svc-reservaciones` (Kustomize) | `tienda` |
 | [`svc-ordenes.yaml`](svc-ordenes.yaml) | `svc-ordenes` | Pago y pedidos | `tienda/svc-ordenes` (Kustomize) | `tienda` |
 | [`frontend.yaml`](frontend.yaml) | `frontend` | Sitio web (2 réplicas) e Ingress de la tienda | `tienda/frontend` (Kustomize) | `tienda` |
+| [`tekton-pipelines.yaml`](tekton-pipelines.yaml) | `tekton-pipelines` | Tekton Pipelines v1.18.0 | `plataforma/tekton/pipelines` (Kustomize sobre el manifiesto oficial) | `tekton-pipelines` |
+| [`tekton-triggers.yaml`](tekton-triggers.yaml) | `tekton-triggers` | Tekton Triggers v0.37.2 + interceptores | `plataforma/tekton/triggers` | `tekton-pipelines` |
+| [`tekton-dashboard.yaml`](tekton-dashboard.yaml) | `tekton-dashboard` | Tekton Dashboard v0.74.0 (solo lectura) e Ingress | `plataforma/tekton/dashboard` | `tekton-pipelines` |
+| [`ci.yaml`](ci.yaml) | `ci` | Tasks, Pipeline y Triggers de la boletera | **`equipoEmpiroso-app/tekton`** | `ci` |
 
 Todas sincronizan solas (`automated`) con `selfHeal`: si alguien cambia algo a
 mano en el clúster, Argo CD lo regresa a lo que dice Git. Todas usan `prune`

@@ -1,0 +1,41 @@
+# Tekton Pipelines · namespaces tekton-pipelines y tekton-pipelines-resolvers
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tekton-pipelines
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/obeedt/equipoEmpiroso-gitops.git
+    targetRevision: main
+    path: plataforma/tekton/pipelines
+  destination:
+    server: https://kubernetes.default.svc
+  # Tekton llena estos campos al arrancar (certificados de sus webhooks y
+  # reglas de admisión). Argo CD no debe tratarlos como diferencias ni
+  # regresarlos al valor del manifiesto.
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions: [".webhooks"]
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions: [".webhooks"]
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jqPathExpressions: [".spec.conversion.webhook.clientConfig.caBundle"]
+    - kind: Secret
+      name: webhook-certs
+      namespace: tekton-pipelines
+      jqPathExpressions: [".data"]
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true            # las CRDs de Tekton son muy grandes
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

@@ -1,0 +1,23 @@
+# Tekton Dashboard v0.74.0 (LTS; soporta Pipelines v1.18.x y Triggers v0.37.x) · Argo CD: apps/tekton-dashboard.yaml
+# release.yaml = modo SOLO LECTURA: se ven pipelines, ejecuciones y logs, pero
+# no se puede crear, borrar ni relanzar nada desde la interfaz.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - https://infra.tekton.dev/tekton-releases/dashboard/previous/v0.74.0/release.yaml
+  - ingress.yaml
+
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: cualquiera
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              boletera.io/metricas: "true"

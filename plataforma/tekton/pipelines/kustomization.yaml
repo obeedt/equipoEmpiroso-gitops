@@ -1,0 +1,53 @@
+# Tekton Pipelines v1.18.0 (LTS, soporte hasta oct 2027) · Argo CD: apps/tekton-pipelines.yaml
+# Manifiesto oficial, en versión fija (las versiones publicadas no cambian).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - https://infra.tekton.dev/tekton-releases/pipeline/previous/v1.18.0/release.yaml
+
+patches:
+  # Los controladores de Tekton en el worker con el rol "metricas" (k8s-w3)
+  - target:
+      kind: Deployment
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: cualquiera
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              boletera.io/metricas: "true"
+
+  # Los pods de cada ejecución (TaskRun) y el "affinity assistant", que junta
+  # en un mismo nodo las tareas que comparten volumen, también en k8s-w3.
+  # Límite de 30 min por PipelineRun.
+  - target:
+      kind: ConfigMap
+      name: config-defaults
+    patch: |-
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: config-defaults
+      data:
+        default-timeout-minutes: "30"
+        default-pod-template: |
+          nodeSelector:
+            boletera.io/metricas: "true"
+        default-affinity-assistant-pod-template: |
+          nodeSelector:
+            boletera.io/metricas: "true"
+
+  # El autoescalado del webhook necesita metrics-server, que este clúster no
+  # tiene: sin él, el HPA queda en error. El webhook corre con 1 réplica.
+  - target:
+      kind: HorizontalPodAutoscaler
+    patch: |-
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: cualquiera

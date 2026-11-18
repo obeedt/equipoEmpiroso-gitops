@@ -42,6 +42,7 @@ Solo desde equipos conectados a la tailnet del equipo:
 |---|---|
 | **Tienda** | http://tienda.100.103.221.107.nip.io |
 | Argo CD | http://argocd.100.103.221.107.nip.io |
+| Tekton Dashboard (solo lectura) | http://tekton.100.103.221.107.nip.io |
 
 ## Equipo
 

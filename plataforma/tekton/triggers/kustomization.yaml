@@ -1,0 +1,22 @@
+# Tekton Triggers v0.37.2 (serie LTS v0.37, compatible con Pipelines v1.18) · Argo CD: apps/tekton-triggers.yaml
+# release.yaml: controlador y webhook · interceptors.yaml: interceptores (github, cel...)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - https://infra.tekton.dev/tekton-releases/triggers/previous/v0.37.2/release.yaml
+  - https://infra.tekton.dev/tekton-releases/triggers/previous/v0.37.2/interceptors.yaml
+
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: cualquiera
+      spec:
+        template:
+          spec:
+            nodeSelector:
+              boletera.io/metricas: "true"
