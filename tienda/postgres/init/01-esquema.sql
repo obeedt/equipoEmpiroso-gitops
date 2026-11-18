@@ -91,7 +91,8 @@ CREATE TABLE asientos (
     )
 );
 
-CREATE INDEX asientos_evento_estado ON asientos (evento_id, estado);
+-- Para "mejores lugares disponibles" de una sección (estadios de miles de asientos)
+CREATE INDEX asientos_evento_seccion_estado ON asientos (evento_id, seccion, estado);
 CREATE INDEX asientos_reservacion   ON asientos (reservacion_id) WHERE reservacion_id IS NOT NULL;
 CREATE INDEX asientos_orden         ON asientos (orden_id) WHERE orden_id IS NOT NULL;
 CREATE INDEX ordenes_evento         ON ordenes (evento_id);
@@ -123,6 +124,8 @@ CREATE VIEW ventas_por_evento AS
 SELECT e.id,
        e.nombre,
        e.artista,
+       e.recinto,
+       e.ciudad,
        e.capacidad,
        count(*) FILTER (WHERE a.estado = 'vendido')                                 AS vendidos,
        count(*) FILTER (WHERE a.estado = 'bloqueado')                               AS bloqueados,

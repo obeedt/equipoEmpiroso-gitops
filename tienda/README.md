@@ -20,7 +20,7 @@ El tag de cada imagen lo actualizará el pipeline de Tekton con el SHA del commi
 | `services.yaml` | `postgres` (lo usan los microservicios) y `postgres-headless` (lo usa el StatefulSet) |
 | `configmap.yaml` | Base `boletera`, usuario `boletera_app`, zona horaria |
 | `init/01-esquema.sql` | Tablas, restricciones, índices y vistas (esquema versión `001`) |
-| `init/02-datos.sql` | 22 conciertos, 2,840 asientos en 3 secciones y 444 órdenes de ejemplo |
+| `init/02-datos.sql` | 22 conciertos de artistas reales en recintos reales, con su aforo: 368,823 asientos en 3 secciones y ~91,400 órdenes de ejemplo |
 | `init/03-usuario-app.sh` | Crea `boletera_app`: lee y escribe datos, pero no puede cambiar tablas |
 
 Los scripts de `init/` solo corren **la primera vez**, con el volumen vacío.
@@ -73,15 +73,27 @@ Secret nuevo con otra contraseña ya no coincidiría.
 
 ### Flujo de compra
 
-1. **Catálogo** (svc-eventos): `eventos WHERE activo`, y el mapa de asientos desde `asientos_estado_actual`.
-2. **Agregar al carrito** (svc-reservaciones): crear una `reservacion` y bloquear los asientos en **un solo `UPDATE`**, que solo toma los que siguen libres:
+1. **Catálogo** (svc-eventos): `eventos WHERE activo`, y por cada evento sus secciones con precio y lugares disponibles:
    ```sql
-   UPDATE asientos
-   SET estado = 'bloqueado', reservacion_id = $1, bloqueado_hasta = now() + interval '10 minutes'
-   WHERE evento_id = $2 AND id = ANY($3)
-     AND (estado = 'disponible' OR (estado = 'bloqueado' AND bloqueado_hasta <= now()));
+   SELECT seccion, precio, count(*) FILTER (WHERE estado = 'disponible') AS disponibles
+   FROM asientos_estado_actual WHERE evento_id = $1 GROUP BY seccion, precio;
    ```
-   Si actualiza menos filas que asientos pedidos, alguien más los ganó: se deshace la operación y se avisa al usuario. Así dos personas nunca bloquean el mismo asiento.
+2. **Agregar al carrito** (svc-reservaciones): el usuario elige **sección y cantidad**, como en una boletera real. Los recintos tienen miles de lugares, así que no se elige asiento por asiento en un mapa. Se crea una `reservacion` y se bloquean los **mejores lugares disponibles** en una sola sentencia:
+   ```sql
+   WITH elegidos AS (
+       SELECT id FROM asientos
+       WHERE evento_id = $1 AND seccion = $2
+         AND (estado = 'disponible' OR (estado = 'bloqueado' AND bloqueado_hasta <= now()))
+       ORDER BY id                 -- los ids van de los mejores lugares a los peores
+       LIMIT $3                    -- cantidad de boletos
+       FOR UPDATE SKIP LOCKED      -- salta los que otra compra está tomando en ese instante
+   )
+   UPDATE asientos a
+   SET estado = 'bloqueado', reservacion_id = $4, bloqueado_hasta = now() + interval '10 minutes'
+   FROM elegidos e WHERE a.id = e.id
+   RETURNING a.id, a.fila, a.numero, a.precio;
+   ```
+   Si regresa menos filas que boletos pedidos, ya no hay suficientes en esa sección: se deshace la operación y se avisa al usuario. Con `SKIP LOCKED`, dos compras simultáneas reciben lugares distintos sin esperarse entre sí. En un estadio de 65,000 lugares tarda unos 100 ms.
 3. **Pagar** (svc-ordenes), en una transacción: insertar la `orden` con su `reservacion_id`, pasar sus asientos a `vendido` con `orden_id`, y marcar la reservación como `confirmada`. Si el navegador reintenta, `reservacion_id UNIQUE` impide cobrar dos veces.
 
 La base también se protege sola. La restricción `asiento_coherente` rechaza,
@@ -90,4 +102,12 @@ por ejemplo, un asiento `vendido` sin orden.
 ### Métrica y alerta de negocio
 
 - **Métrica:** boletos vendidos por evento → `ventas_por_evento.vendidos` y `porcentaje_vendido`.
-- **Alerta:** evento con más del 90 % vendido. Los eventos 1 (96 %) y 2 (92 %) ya la cumplen con los datos de ejemplo.
+- **Alerta:** evento con más del 90 % vendido. Con los datos de ejemplo ya la cumplen el evento 1 (Humbe, 92 %) y el 3 (Los Bukis, 96 %).
+- **Demo en vivo:** el evento 13 (Siddhartha, Lunario, 1,000 lugares) queda en **89.8 %**. Comprar 4 boletos lo pasa a 90.2 % y dispara la alerta.
+
+### Datos de ejemplo
+
+Los artistas y recintos son reales, y la capacidad de cada evento es el aforo
+del recinto. Precios y ventas son inventados para una demo académica; **no es
+una venta real**. Los eventos 1-3, 5, 8-11 y 22 vienen de la cartelera que
+reunió el equipo, y los demás son conciertos imaginarios de artistas reales.

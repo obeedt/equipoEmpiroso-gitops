@@ -18,6 +18,7 @@ Es el único `kubectl apply` del proyecto, y `root` se excluye a sí misma.
 | [`nfs-csi.yaml`](nfs-csi.yaml) | `nfs-csi` | Driver CSI de NFS | chart `csi-driver-nfs` 4.13.6 + `plataforma/nfs/values.yaml` | `kube-system` |
 | [`storageclasses.yaml`](storageclasses.yaml) | `storageclasses` | StorageClass `nfs` (predeterminado) | `plataforma/storageclasses` | — |
 | [`local-path.yaml`](local-path.yaml) | `local-path` | StorageClass `local-path` | `plataforma/local-path/chart` (v0.0.37) | `local-path-storage` |
+| [`postgres.yaml`](postgres.yaml) | `postgres` | PostgreSQL 18.7 (StatefulSet) | `tienda/postgres` (Kustomize) | `tienda` |
 
 Todas sincronizan solas (`automated`) con `selfHeal`: si alguien cambia algo a
 mano en el clúster, Argo CD lo regresa a lo que dice Git. Todas usan `prune`

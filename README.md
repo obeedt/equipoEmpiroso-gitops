@@ -28,7 +28,8 @@ El código de los microservicios y el pipeline de Tekton están en
 | 1 · Clúster de 4 nodos | ✅ Listo · [documentación](cluster/docs/01-cluster-desde-cero.md) |
 | 2 · Argo CD (app-of-apps) | ✅ Listo · [documentación](docs/02-argocd.md) |
 | 3 · Ingress y StorageClasses | ✅ Listo · [documentación](docs/03-ingress-y-almacenamiento.md) |
-| Base de datos y tienda | Pendiente |
+| 4 · PostgreSQL (StatefulSet + NFS) | ✅ Listo · [documentación](docs/04-postgresql.md) |
+| Microservicios de la tienda | Pendiente |
 | CI con Tekton | Pendiente |
 | Monitoreo y alertas | Pendiente |
 | Logs y trazas | Pendiente |
