@@ -6,10 +6,15 @@ worker con el rol `app` (k8s-w1).
 | Carpeta | Qué es | Estado |
 |---|---|---|
 | [`postgres/`](postgres/) | PostgreSQL 18.7 en StatefulSet, volumen en NFS, esquema y datos de ejemplo | ✅ |
-| `frontend/`, `svc-eventos/`, `svc-ordenes/`, `svc-reservaciones/` | Deployment, Service y ConfigMap de cada microservicio | pendiente |
-| Ingress de la tienda | `tienda.100.103.221.107.nip.io` | pendiente |
+| [`svc-eventos/`](svc-eventos/) | Catálogo de conciertos y métrica de negocio · 2 réplicas | ✅ |
+| [`svc-reservaciones/`](svc-reservaciones/) | Carrito: bloqueo temporal de asientos | ✅ |
+| [`svc-ordenes/`](svc-ordenes/) | Pago y pedidos | ✅ |
+| [`frontend/`](frontend/) | Sitio web · 2 réplicas · Ingress **http://tienda.100.103.221.107.nip.io** | ✅ |
 
-El tag de cada imagen lo actualizará el pipeline de Tekton con el SHA del commit.
+Cada carpeta de servicio tiene su `kustomization.yaml` con la etiqueta de la
+imagen (`newTag` = SHA del commit en `equipoEmpiroso-app`). Desplegar una
+versión nueva es cambiar esa línea; el pipeline de Tekton lo hará solo.
+Detalle en [`docs/05-microservicios.md`](../docs/05-microservicios.md).
 
 ## PostgreSQL (`postgres/`)
 

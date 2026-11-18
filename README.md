@@ -29,7 +29,7 @@ El código de los microservicios y el pipeline de Tekton están en
 | 2 · Argo CD (app-of-apps) | ✅ Listo · [documentación](docs/02-argocd.md) |
 | 3 · Ingress y StorageClasses | ✅ Listo · [documentación](docs/03-ingress-y-almacenamiento.md) |
 | 4 · PostgreSQL (StatefulSet + NFS) | ✅ Listo · [documentación](docs/04-postgresql.md) |
-| Microservicios de la tienda | Pendiente |
+| 5 · Microservicios de la tienda | ✅ Listo · [documentación](docs/05-microservicios.md) |
 | CI con Tekton | Pendiente |
 | Monitoreo y alertas | Pendiente |
 | Logs y trazas | Pendiente |
@@ -40,6 +40,7 @@ Solo desde equipos conectados a la tailnet del equipo:
 
 | Aplicación | URL |
 |---|---|
+| **Tienda** | http://tienda.100.103.221.107.nip.io |
 | Argo CD | http://argocd.100.103.221.107.nip.io |
 
 ## Equipo

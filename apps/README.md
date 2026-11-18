@@ -19,11 +19,17 @@ Es el único `kubectl apply` del proyecto, y `root` se excluye a sí misma.
 | [`storageclasses.yaml`](storageclasses.yaml) | `storageclasses` | StorageClass `nfs` (predeterminado) | `plataforma/storageclasses` | — |
 | [`local-path.yaml`](local-path.yaml) | `local-path` | StorageClass `local-path` | `plataforma/local-path/chart` (v0.0.37) | `local-path-storage` |
 | [`postgres.yaml`](postgres.yaml) | `postgres` | PostgreSQL 18.7 (StatefulSet) | `tienda/postgres` (Kustomize) | `tienda` |
+| [`svc-eventos.yaml`](svc-eventos.yaml) | `svc-eventos` | Catálogo (2 réplicas) | `tienda/svc-eventos` (Kustomize) | `tienda` |
+| [`svc-reservaciones.yaml`](svc-reservaciones.yaml) | `svc-reservaciones` | Carrito: bloqueo temporal de asientos | `tienda/svc-reservaciones` (Kustomize) | `tienda` |
+| [`svc-ordenes.yaml`](svc-ordenes.yaml) | `svc-ordenes` | Pago y pedidos | `tienda/svc-ordenes` (Kustomize) | `tienda` |
+| [`frontend.yaml`](frontend.yaml) | `frontend` | Sitio web (2 réplicas) e Ingress de la tienda | `tienda/frontend` (Kustomize) | `tienda` |
 
 Todas sincronizan solas (`automated`) con `selfHeal`: si alguien cambia algo a
 mano en el clúster, Argo CD lo regresa a lo que dice Git. Todas usan `prune`
 salvo `storageclasses`, para que borrar un StorageClass de Git por error no
 afecte a los volúmenes existentes.
 
-Más detalle en [`docs/02-argocd.md`](../docs/02-argocd.md) y
-[`docs/03-ingress-y-almacenamiento.md`](../docs/03-ingress-y-almacenamiento.md).
+Más detalle en [`docs/02-argocd.md`](../docs/02-argocd.md),
+[`docs/03-ingress-y-almacenamiento.md`](../docs/03-ingress-y-almacenamiento.md),
+[`docs/04-postgresql.md`](../docs/04-postgresql.md) y
+[`docs/05-microservicios.md`](../docs/05-microservicios.md).
