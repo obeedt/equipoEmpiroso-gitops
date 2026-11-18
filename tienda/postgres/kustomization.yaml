@@ -1,0 +1,29 @@
+# PostgreSQL de la boletera · Argo CD lo aplica con Kustomize (apps/postgres.yaml)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tienda
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: boletera
+    includeSelectors: false
+
+resources:
+  - configmap.yaml
+  - services.yaml
+  - statefulset.yaml
+
+# Los scripts de init/ se guardan como archivos normales en Git y Kustomize
+# los convierte en un ConfigMap que se monta en /docker-entrypoint-initdb.d.
+# PostgreSQL solo los ejecuta la PRIMERA vez (con el directorio de datos vacío).
+configMapGenerator:
+  - name: postgres-init
+    files:
+      - init/01-esquema.sql
+      - init/02-datos.sql
+      - init/03-usuario-app.sh
+    options:
+      # Nombre fijo: cambiar un script no debe reiniciar la base de datos
+      # (de todas formas ya no se volvería a ejecutar).
+      disableNameSuffixHash: true

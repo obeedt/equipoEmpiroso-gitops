@@ -1,0 +1,19 @@
+# PostgreSQL de la boletera (StatefulSet + volumen en NFS)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: postgres
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/obeedt/equipoEmpiroso-gitops.git
+    targetRevision: main
+    path: tienda/postgres          # tiene kustomization.yaml: Argo CD usa Kustomize
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tienda
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

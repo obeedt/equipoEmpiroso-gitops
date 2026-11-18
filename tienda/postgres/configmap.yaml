@@ -1,0 +1,11 @@
+# Configuración de PostgreSQL (lo que NO es secreto).
+# Las contraseñas van en el Secret "postgres-credenciales", que se crea a
+# mano en el clúster y NO está en Git (ver tienda/README.md).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+data:
+  POSTGRES_DB: boletera           # base de datos que se crea al inicializar
+  APP_DB_USER: boletera_app       # usuario de los microservicios (sin permisos de administrador)
+  TZ: America/Mexico_City
