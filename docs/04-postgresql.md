@@ -1,13 +1,13 @@
 # Etapa 4 · PostgreSQL en StatefulSet con volumen persistente
 
 Proyecto 3 · Boletera de conciertos · DevOps 2026
-Rol: Plataforma / CD (+ Desarrollo, por el diseño del esquema) · 17 de noviembre de 2026
+Rol: Plataforma / CD (+ Desarrollo, por el diseño del esquema) · 17 y 18 de noviembre de 2026
 
 Esta etapa instala la base de datos de la boletera: **PostgreSQL 18.7** en un
 **StatefulSet** con su volumen en el StorageClass **`nfs`**, el esquema que
-usarán los microservicios y datos de ejemplo. Cubre el rubro **BD y
-persistencia**: PVC en `Bound`, y al borrar el pod de la base el pedido sigue
-existiendo.
+usarán los microservicios y datos de ejemplo con artistas y recintos reales.
+Cubre el rubro **BD y persistencia**: PVC en `Bound`, y al borrar el pod de la
+base el pedido sigue existiendo.
 
 ---
 
@@ -19,7 +19,7 @@ existiendo.
 4. [El StatefulSet](#4-el-statefulset)
 5. [Credenciales: dos Secrets fuera de Git](#5-credenciales-dos-secrets-fuera-de-git)
 6. [Diseño del esquema](#6-diseño-del-esquema)
-7. [Datos de ejemplo](#7-datos-de-ejemplo)
+7. [Datos de ejemplo: artistas y recintos reales](#7-datos-de-ejemplo-artistas-y-recintos-reales)
 8. [Scripts de inicialización y cambios futuros](#8-scripts-de-inicialización-y-cambios-futuros)
 9. [Pruebas antes de desplegar](#9-pruebas-antes-de-desplegar)
 10. [Despliegue y prueba de persistencia](#10-despliegue-y-prueba-de-persistencia)
@@ -32,8 +32,8 @@ existiendo.
 
 ```
 $ kubectl -n tienda get sts,pods,pvc,svc
-NAME                        READY   AGE
-statefulset.apps/postgres   1/1     11m
+NAME                        READY
+statefulset.apps/postgres   1/1
 
 NAME             READY   STATUS    RESTARTS   NODE
 pod/postgres-0   1/1     Running   0          k8s-w1
@@ -41,15 +41,15 @@ pod/postgres-0   1/1     Running   0          k8s-w1
 NAME                                     STATUS   CAPACITY   ACCESS MODES   STORAGECLASS
 persistentvolumeclaim/datos-postgres-0   Bound    5Gi        RWO            nfs
 
-NAME                        TYPE        CLUSTER-IP     PORT(S)
-service/postgres            ClusterIP   10.97.44.176   5432/TCP
-service/postgres-headless   ClusterIP   None           5432/TCP
+NAME                        TYPE        PORT(S)
+service/postgres            ClusterIP   5432/TCP
+service/postgres-headless   ClusterIP   5432/TCP   (headless)
 ```
 
 | Qué | Estado |
 |---|---|
 | Application `postgres` en Argo CD | `Synced / Healthy` |
-| Datos | 22 eventos, 2,840 asientos, 444 órdenes de ejemplo; esquema versión `001` |
+| Datos | 22 conciertos de artistas reales, 368,823 asientos, 91,438 órdenes de ejemplo; esquema versión `001`; 121 MB |
 | Volumen | `/srv/nfs/k8s/tienda-datos-postgres-0/18/docker` en el NFS del control plane |
 | Prueba de la rúbrica | ✅ Se borró el pod y el pedido de prueba siguió existiendo |
 | Self-heal | ✅ Al escalar el StatefulSet a 0 a mano, Argo CD lo regresó a 1 réplica en menos de un segundo |
@@ -91,7 +91,7 @@ actualización de versión mayor.
 | [`tienda/postgres/services.yaml`](../tienda/postgres/services.yaml) | `postgres` (lo usan los microservicios) y `postgres-headless` (lo usa el StatefulSet) |
 | [`tienda/postgres/configmap.yaml`](../tienda/postgres/configmap.yaml) | `POSTGRES_DB=boletera`, `APP_DB_USER=boletera_app`, `TZ=America/Mexico_City` |
 | [`tienda/postgres/init/01-esquema.sql`](../tienda/postgres/init/01-esquema.sql) | Tablas, restricciones, índices y vistas (sección 6) |
-| [`tienda/postgres/init/02-datos.sql`](../tienda/postgres/init/02-datos.sql) | Datos de ejemplo (sección 7) |
+| [`tienda/postgres/init/02-datos.sql`](../tienda/postgres/init/02-datos.sql) | 22 conciertos de artistas reales, asientos por sección y ventas (sección 7) |
 | [`tienda/postgres/init/03-usuario-app.sh`](../tienda/postgres/init/03-usuario-app.sh) | Usuario `boletera_app` con permisos solo sobre los datos |
 | [`tienda/README.md`](../tienda/README.md) | Secrets y **contrato de datos** para los microservicios |
 
@@ -122,7 +122,7 @@ ejecutar (sección 8).
 | `volumeMounts` | `/var/lib/postgresql` | La ruta correcta desde PostgreSQL 18 (sección 2). |
 | `nodeSelector` | `boletera.io/app: "true"` | En k8s-w1, junto a la tienda. Como los datos están en NFS, podría correr en cualquier worker. |
 | `terminationGracePeriodSeconds` | 60 | Tiempo para que PostgreSQL guarde todo en disco antes de detenerse. El log confirma un cierre limpio: `database system was shut down`. |
-| `startupProbe` | `pg_isready`, hasta 5 min | La primera vez crea la base y corre los scripts; mientras tanto no lo reinicia. |
+| `startupProbe` | `pg_isready`, hasta 5 min | La primera vez crea la base y carga ~370,000 asientos (~1 min en NFS); mientras tanto no lo reinicia. |
 | `readinessProbe` / `livenessProbe` | `pg_isready` cada 10 s / 20 s | No manda tráfico si no responde, y lo reinicia si se cuelga. |
 | `resources` | requests 100m / 256Mi, límite 512Mi | La rúbrica pide `requests` y `limits` en todos los contenedores. |
 
@@ -178,7 +178,7 @@ carrito → pedido**, traducido a una boletera:
 
 ```mermaid
 flowchart LR
-  F["frontend"] --> E["svc-eventos<br/>catálogo y mapa de asientos"]
+  F["frontend"] --> E["svc-eventos<br/>catálogo y secciones"]
   F --> R["svc-reservaciones<br/>carrito: bloquea asientos"]
   F --> O["svc-ordenes<br/>pago: crea la orden"]
   E --> DB[("PostgreSQL<br/>boletera")]
@@ -190,7 +190,7 @@ flowchart LR
 
 | Tabla | Qué guarda | Escribe |
 |---|---|---|
-| `eventos` | Conciertos: nombre, artista, `genero`, `descripcion`, recinto, ciudad, fecha, `precio_base`, `capacidad`, `activo` | — (datos iniciales) |
+| `eventos` | Conciertos: nombre, artista, `genero`, `descripcion`, recinto, ciudad, fecha, `precio_base`, `capacidad` (el aforo), `activo` | — (datos iniciales) |
 | `asientos` | Un registro por lugar: `seccion` (VIP, Preferente, General), `fila`, `numero`, `precio`, `estado` (`disponible`, `bloqueado`, `vendido`) | svc-reservaciones, svc-ordenes |
 | `reservaciones` | El **carrito**: los asientos apartados por una `sesion` del navegador, con `expira_en` | svc-reservaciones |
 | `ordenes` | Pedidos: cliente, `cantidad` (1 a 10), `total`, `estado`, `reservacion_id` | svc-ordenes |
@@ -201,12 +201,14 @@ flowchart LR
 | Decisión | Para qué |
 |---|---|
 | **El carrito es una `reservacion`** con dueño (`sesion`) y vencimiento | El microservicio distintivo del proyecto 3 es "reservación de asientos con bloqueo temporal". Ligar los asientos a una reservación permite saber qué cobrar en cada orden y liberarlos si el usuario no paga a tiempo. |
-| **Bloqueo en un solo `UPDATE`** que solo toma asientos libres | Dos personas nunca bloquean el mismo asiento: si otra sesión ya lo tomó, el `UPDATE` afecta menos filas y el servicio lo detecta. La consulta está en el contrato de datos (`tienda/README.md`). |
+| **Compra por sección y cantidad** ("mejores lugares disponibles") | Los recintos tienen el aforo real: hasta 65,000 lugares. Como en una boletera real, el usuario elige sección y cuántos boletos, y el sistema le asigna los mejores lugares libres. |
+| **Asignación con `FOR UPDATE SKIP LOCKED`** | Dos compras simultáneas reciben lugares distintos sin esperarse entre sí, y nunca el mismo asiento. La consulta está en el contrato de datos (`tienda/README.md`). En el estadio de 65,000 lugares tarda unos 100 ms. |
+| Índice `(evento_id, seccion, estado)` | Hace rápida esa búsqueda dentro de una sección. |
 | **Vista `asientos_estado_actual`** | Un bloqueo vencido cuenta como `disponible` sin que un proceso tenga que liberarlo. Todos los servicios leen la disponibilidad de aquí, así siempre coinciden. |
 | **`ordenes.reservacion_id` único** | Si el navegador reintenta el pago, la segunda orden se rechaza: no se cobra dos veces. |
 | **Restricción `asiento_coherente`** | La base rechaza combinaciones imposibles, por ejemplo un asiento `vendido` sin orden o `bloqueado` sin reservación. |
-| **Precio por asiento y secciones** | VIP (filas A-B, ×2), Preferente (C-E, ×1.5) y General (×1). El frontend puede mostrar un mapa por secciones, y el total de la orden es la suma de sus asientos. |
-| **Vista `ventas_por_evento`** | La **métrica de negocio** del proyecto 3 (boletos vendidos por evento) y su porcentaje, que alimenta la **alerta** de más del 90 % vendido. `svc-eventos` la expondrá en `/metrics`. |
+| **Precio por asiento** | Cada sección tiene su precio, y el total de la orden es la suma de sus asientos. |
+| **Vista `ventas_por_evento`** | La **métrica de negocio** del proyecto 3 (boletos vendidos por evento), con recinto, ciudad y porcentaje. Alimenta la **alerta** de más del 90 % vendido. `svc-eventos` la expondrá en `/metrics`; calcula los 22 eventos en ~60 ms. |
 | `GENERATED ALWAYS AS IDENTITY` y `UUID` | La forma recomendada de generar IDs en PostgreSQL moderno. Las reservaciones usan UUID porque su ID viaja al navegador y no debe ser adivinable. |
 | Una sola base para los tres servicios | Con un solo PostgreSQL y un equipo de dos personas es la opción práctica. Cada servicio escribe solo en sus tablas. |
 
@@ -222,27 +224,77 @@ tuviera una falla de seguridad, no podría destruir el esquema.
 
 ---
 
-## 7. Datos de ejemplo
+## 7. Datos de ejemplo: artistas y recintos reales
 
-La rúbrica pide un script de inicialización con mínimo 20 productos.
+La rúbrica pide un script de inicialización con mínimo 20 productos. Hay **22
+conciertos**:
 
-| Dato | Cantidad |
+- **9 de la cartelera que reunió el equipo** (nombre, fecha y recinto tal cual): Humbe, Enjambre, Los Bukis, NSQK, Urbano Fest, Pitbull, Tame Impala, Interpol & Queens of the Stone Age y Rels B.
+- **13 conciertos imaginarios de artistas reales**, con nombres genéricos ("Café Tacvba en concierto") para no inventarles giras: Café Tacvba, Natalia Lafourcade, Zoé, Molotov, Siddhartha, Julieta Venegas, Carín León, Los Ángeles Azules, Caifanes, Panteón Rococó, Belanova, Kinky y Ximena Sariñana.
+
+De la cartelera se dejaron fuera los eventos que no son conciertos (lucha libre,
+monster trucks, Fórmula E y un musical) y un festival cuya fecha cae antes de la
+presentación.
+
+> **Datos de ejemplo para una demo académica. No es una venta real.** Precios y
+> ventas son inventados.
+
+### 7.1 Capacidad = aforo del recinto
+
+| Recinto | Ciudad | Aforo usado |
+|---|---|---|
+| Estadio GNP Seguros | Ciudad de México | 65,000 |
+| Estadio Akron | Zapopan | 49,850 |
+| Estadio Ciudad de los Deportes | Ciudad de México | 33,000 (aprox.) |
+| Arena CDMX | Ciudad de México | 22,300 |
+| Palacio de los Deportes | Ciudad de México | 20,000 |
+| Arena Monterrey | Monterrey | 17,599 |
+| Arena VFG | Tlajomulco de Zúñiga | 15,000 |
+| Coliseo GNP Seguros | Zapopan | 15,000 (aprox.) |
+| Auditorio Telmex | Zapopan | 11,500 |
+| Auditorio Nacional | Ciudad de México | 10,000 |
+| Pepsi Center WTC | Ciudad de México | 7,500 (aprox.) |
+| Auditorio Banamex | Monterrey | 7,000 |
+| Teatro Metropólitan | Ciudad de México | 3,165 |
+| Teatro Diana | Guadalajara | 2,345 |
+| Lunario del Auditorio Nacional | Ciudad de México | 1,000 |
+
+Fuente: artículos de Wikipedia en español de cada recinto (noviembre de 2026).
+Los marcados *aprox.* no tienen una cifra publicada que se pudiera confirmar.
+
+### 7.2 Asientos y secciones
+
+Un asiento por lugar del aforo (**368,823** en total), en filas de 50:
+
+| Sección | Lugares del recinto | Precio |
+|---|---|---|
+| VIP | primer 5 % | precio base × 2 |
+| Preferente | siguiente 25 % | precio base × 1.5 |
+| General | resto (70 %) | precio base |
+
+Por ejemplo, en NSQK (Estadio GNP Seguros, base $1,100): 3,250 lugares VIP a
+$2,200, 16,250 Preferente a $1,650 y 45,500 General a $1,100.
+
+### 7.3 Venta inicial
+
+Cada evento tiene un porcentaje vendido, **repartido por igual entre sus
+secciones**, en órdenes de 2 boletos (**91,438 órdenes**, 182,876 boletos). Así
+cada sección conserva lugares disponibles, como en una venta real.
+
+```
+ id |           nombre            | vendidos | capacidad | porcentaje_vendido
+----+-----------------------------+----------+-----------+--------------------
+  3 | La Despedida                |    14400 |     15000 |               96.0
+  1 | Dueño del Cielo Tour Finale |    20512 |     22300 |               92.0
+ 13 | Siddhartha en concierto     |      898 |      1000 |               89.8
+ 10 | Deadbeat Tour               |    12746 |     15000 |               85.0
+  2 | Enjambre en concierto       |     5600 |      7000 |               80.0
+```
+
+| Evento | Para qué |
 |---|---|
-| Conciertos (`eventos`) | 22, con artistas ficticios, recintos reales y fechas de diciembre 2026 a junio 2027 |
-| Asientos | 2,840 (uno por lugar), en 3 secciones con su precio |
-| Órdenes pagadas | 444, de 2 boletos cada una |
-
-La venta inicial varía por evento: del 96 % al 0 %. Los **eventos 1 (96 %) y
-2 (92 %)** quedan arriba del 90 %, para poder demostrar la alerta de negocio en
-la etapa de monitoreo.
-
-```
- id |         nombre          | vendidos | capacidad | porcentaje_vendido
-----+-------------------------+----------+-----------+--------------------
-  1 | Gira Faro del Norte     |       96 |       100 |               96.0
-  2 | Noche de Cumbia Sideral |      138 |       150 |               92.0
-  3 | Acústico en el Bosque   |       64 |        80 |               80.0
-```
+| Los Bukis (96 %) y Humbe (92 %) | La **alerta de negocio** (más del 90 % vendido) ya está activa desde el inicio. |
+| **Siddhartha, Lunario (89.8 %)** | **Demo en vivo:** comprar 4 boletos lo pasa a 90.2 % y dispara la alerta frente al profesor. |
 
 ---
 
@@ -260,37 +312,62 @@ ejecutan en orden alfabético:
 
 **Consecuencias:**
 
-- Al reiniciar o recrear el pod, **los scripts no se repiten** y los datos se conservan. Comprobado: después de recrear el pod, `esquema_version` siguió con un solo registro.
+- Al reiniciar o recrear el pod, **los scripts no se repiten** y los datos se conservan.
 - **Cambiar el esquema** de una base ya creada: con migraciones (`ALTER TABLE ...` como `postgres`) que se registran en `esquema_version` con la siguiente versión (`002`, …).
-- **Cambiar los datos iniciales** (por ejemplo, otros conciertos): se editan los scripts en Git y se **reinicializa** la base. Hay que borrar el PVC para que PostgreSQL arranque con la carpeta vacía:
-  ```bash
-  kubectl -n tienda delete pvc datos-postgres-0 --wait=false   # queda pendiente mientras el pod lo use
-  kubectl -n tienda delete pod postgres-0                      # el StatefulSet lo recrea con un PVC nuevo
-  ```
-  La carpeta anterior no se pierde: el StorageClass `nfs` la archiva (`archived-tienda-datos-postgres-0`). Esto borra **todos** los pedidos, así que solo conviene antes de tener datos reales.
+- **Cambiar los datos iniciales**: se editan los scripts en Git y se **reinicializa** la base, borrando el PVC para que PostgreSQL arranque con la carpeta vacía. Esto borra **todos** los pedidos, así que solo conviene antes de tener datos reales.
+
+### 8.1 Reinicialización con los datos finales
+
+La primera versión de los datos tenía artistas ficticios y recintos de 50 a 200
+lugares. Se cambió por artistas y aforos reales (sección 7) **antes** de
+programar los microservicios, así que no se perdió nada importante. Se hizo así:
+
+1. `git push` de los scripts nuevos. Argo CD actualizó el ConfigMap `postgres-init` sin reiniciar la base.
+2. Se comprobó que el ConfigMap ya tenía los datos nuevos:
+   ```bash
+   kubectl -n tienda get configmap postgres-init -o yaml | grep -c "Humbe"
+   ```
+3. Se borraron el volumen y el pod:
+   ```bash
+   kubectl -n tienda delete pvc datos-postgres-0 --wait=false   # queda pendiente mientras el pod lo use
+   kubectl -n tienda delete pod postgres-0                      # al irse el pod, el PVC se borra
+   ```
+4. El StatefulSet creó un PVC nuevo y un pod nuevo, que encontró la carpeta vacía y corrió los scripts.
+
+La base anterior no se perdió: el StorageClass `nfs` **archivó** su carpeta como
+`archived-tienda-datos-postgres-0`.
+
+```
+/srv/nfs/k8s/
+├── archived-prueba-volumenes-datos-nfs   ← prueba de la etapa 3
+├── archived-tienda-datos-postgres-0      ← base con los datos anteriores (65 MB)
+└── tienda-datos-postgres-0               ← base actual (385 MB en disco)
+```
 
 ---
 
 ## 9. Pruebas antes de desplegar
 
-Antes del primer `git push`, todo se probó sin tocar Kubernetes:
+Antes de cada `git push`, todo se probó sin tocar Kubernetes:
 
 1. **Manifiestos:** `kubectl kustomize` generó los 5 objetos y el API server los aceptó con `kubectl apply --dry-run=server`.
-2. **Base real sobre el NFS real:** en k8s-w1 se montó el NFS del clúster y se levantó PostgreSQL 18.7 con `ctr`, en un namespace de containerd aparte que Kubernetes no ve, con los mismos scripts y contraseñas de prueba. Al terminar se borraron el contenedor, la imagen y la carpeta de prueba, y se desmontó el NFS.
+2. **Base real sobre el NFS real:** en k8s-w1 se montó el NFS del clúster y se levantó PostgreSQL 18.7 con `ctr`, en un namespace de containerd aparte que Kubernetes no ve, con los mismos scripts y contraseñas de prueba. Después se simuló el flujo de los microservicios como `boletera_app`. Al terminar se borraron el contenedor, la imagen y la carpeta de prueba, y se desmontó el NFS.
 
 | Prueba | Resultado |
 |---|---|
+| Inicialización en NFS | **61 s** con 368,823 asientos (el límite de la sonda de arranque es 5 min) |
 | Carpeta de datos en NFS | dueño `999`, permisos `700` |
-| Datos | 22 eventos, 2,840 asientos, 444 órdenes; 0 inconsistencias (asientos = capacidad; total de cada orden = suma de sus asientos) |
-| Precios por sección (evento 1, base $850) | VIP $1,700 · Preferente $1,275 · General $850 |
-| Sesión A bloquea 2 asientos | `UPDATE 2` |
-| Sesión B intenta **los mismos** | `UPDATE 0`: no se los gana |
-| Bloqueo vencido | guardado como `bloqueado`, la vista lo muestra `disponible` y otra sesión lo toma |
-| Pago de la sesión A (transacción) | orden de $1,300, asientos `vendido`, reservación `confirmada` |
+| Coherencia | 0 errores: asientos = aforo de cada evento, total de cada orden = suma de sus asientos, ninguna orden con asientos de dos secciones |
+| Venta por sección | NSQK al 70 % vende el 70 % de VIP, de Preferente y de General |
+| "4 boletos en Preferente" en el estadio | fila 293, lugares 25–28, en **100 ms** |
+| Otra sesión pide lo mismo al mismo tiempo | recibe los **siguientes** 4 lugares, nunca los mismos |
+| Pago de la sesión A (transacción) | orden de $6,600 (4 × $1,650), asientos `vendido`, reservación `confirmada` |
 | Reintento del mismo pago | rechazado: `duplicate key ... ordenes_reservacion_id_key` |
 | Asiento `vendido` sin orden | rechazado: `violates check constraint "asiento_coherente"` |
+| Demo de la alerta | Siddhartha 89.8 % → 4 boletos → **90.2 %** (`dispara_alerta = t`) |
+| Métrica de los 22 eventos | 63 ms |
 | `boletera_app` intenta `DROP TABLE` | rechazado: `must be owner of table eventos` |
-| Contenedor **nuevo** sobre los mismos datos | la orden de prueba sigue ahí; los scripts no se repiten |
+| Contenedor **nuevo** sobre los mismos datos | las órdenes siguen ahí; los scripts no se repiten |
 
 ---
 
@@ -310,34 +387,41 @@ kubectl -n tienda exec postgres-0 -- psql -U postgres -d boletera \
 
 ### 10.2 Prueba obligatoria: borrar el pod y que el pedido siga ahí
 
+Hecha sobre la base con los datos finales:
+
 ```bash
 # 1. Un pedido nuevo
 kubectl -n tienda exec postgres-0 -- psql -U postgres -d boletera -c "insert into ordenes (evento_id, cliente_nombre, cliente_email, cantidad, total) values (5, 'Prueba de persistencia', 'persistencia@ejemplo.com', 2, 1900) returning id, cliente_nombre, creada_en;"
- id  |     cliente_nombre     |           creada_en
------+------------------------+-------------------------------
- 445 | Prueba de persistencia | 2026-11-17 23:02:27.522609-06
+  id   |     cliente_nombre     |           creada_en
+-------+------------------------+-------------------------------
+ 91439 | Prueba de persistencia | 2026-11-18 00:22:51.041249-06
 
 # 2. Hora de creación del pod, y se borra
 kubectl -n tienda get pod postgres-0 -o jsonpath='{.metadata.creationTimestamp}' && kubectl -n tienda delete pod postgres-0
-2026-11-18T04:57:12Z
+2026-11-18T06:19:37Z
 pod "postgres-0" deleted
 
 # 3. El StatefulSet lo recrea: pod nuevo, mismo nombre, mismo volumen
 kubectl -n tienda wait --for=condition=Ready pod/postgres-0 --timeout=180s && kubectl -n tienda get pod postgres-0 -o jsonpath='{.metadata.creationTimestamp}'
-2026-11-18T05:02:43Z
+2026-11-18T06:23:00Z
 
 # 4. El pedido sigue ahí
 kubectl -n tienda exec postgres-0 -- psql -U postgres -d boletera -c "select id, cliente_nombre, total, creada_en from ordenes where cliente_nombre = 'Prueba de persistencia';"
- id  |     cliente_nombre     |  total  |           creada_en
------+------------------------+---------+-------------------------------
- 445 | Prueba de persistencia | 1900.00 | 2026-11-17 23:02:27.522609-06
+  id   |     cliente_nombre     |  total  |           creada_en
+-------+------------------------+---------+-------------------------------
+ 91439 | Prueba de persistencia | 1900.00 | 2026-11-18 00:22:51.041249-06
+
+# 5. El volumen en Bound
+kubectl get pvc -A
+NAMESPACE   NAME               STATUS   CAPACITY   ACCESS MODES   STORAGECLASS
+tienda      datos-postgres-0   Bound    5Gi        RWO            nfs
 ```
 
-El pod es nuevo (otra hora de creación), pero el pedido `445` aparece con los
+El pod es nuevo (otra hora de creación), pero el pedido `91439` aparece con los
 mismos datos: vive en el volumen NFS, no en el pod.
 
-La orden `445` es solo de prueba: no tiene asientos asignados, así que no cambia
-la métrica de negocio (que cuenta asientos vendidos).
+La orden `91439` es solo de prueba: no tiene asientos asignados, así que no
+cambia la métrica de negocio (que cuenta asientos vendidos).
 
 ### 10.3 Self-heal del StatefulSet (adelanto de la demo 2)
 
@@ -349,9 +433,9 @@ El cambio a mano dejó la Application en `OutOfSync`, y Argo CD la sincronizó e
 menos de un segundo, regresando el StatefulSet a `replicas: 1` como dice Git:
 
 ```
-05:03:47  Updated sync status: Synced -> OutOfSync
-05:03:47  Initiated automated sync ... Resources: StatefulSet/postgres
-05:03:48  Updated sync status: OutOfSync -> Synced
+Updated sync status: Synced -> OutOfSync
+Initiated automated sync ... Resources: StatefulSet/postgres
+Updated sync status: OutOfSync -> Synced        (1 segundo después)
 ```
 
 El volumen no se tocó (`whenScaled: Retain`) y el pod volvió con todos sus datos.
