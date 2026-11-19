@@ -22,6 +22,7 @@ una dice qué cambia y en qué parte del repositorio.
 | **Limpieza de ejecuciones de Tekton** | Cada PipelineRun deja su volumen de trabajo de 1 GiB en k8s-w3 hasta que se borra. Un pruner que conserve solo las últimas 10 ejecuciones. | `plataforma/tekton/pipelines` |
 | **Respaldo de PostgreSQL** | Un CronJob con `pg_dump` diario a una carpeta del NFS, con retención de una semana, y la prueba de restaurarlo. | `tienda/postgres` |
 | **Alertas de la propia observabilidad** | Avisar si Fluent Bit no puede escribir en OpenSearch, si el disco de OpenSearch pasa de 80 % o si Jaeger deja de recibir trazas. | `monitoring/reglas` |
+| **Trazas más limpias** | Cerca del 40 % de los tramos son internos de FastAPI (`http send` / `http receive`) y no dicen nada útil. `FastAPIInstrumentor.instrument_app(..., exclude_spans=["send", "receive"])` los quita: trazas más fáciles de leer y menos espacio en OpenSearch. | `equipoEmpiroso-app/*/app/main.py` |
 | **Trazas desde Grafana** | Jaeger como fuente de datos en Grafana: desde un pico de errores en el dashboard de aplicación, abrir las trazas de ese momento. | `monitoring/kube-prometheus-stack/values.yaml` |
 
 ## 3. Escala y disponibilidad

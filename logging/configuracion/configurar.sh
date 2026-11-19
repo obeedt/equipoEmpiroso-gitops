@@ -42,9 +42,11 @@ for p in 'boletera-logs-*' 'cluster-logs-*' 'boletera-jaeger-*'; do
   curl -s -X POST "$OS/_plugins/_ism/add/$p" -H "$JSON" -d '{"policy_id":"retencion-7-dias"}'; echo
 done
 # Con un solo nodo, una réplica nunca se puede asignar (índice en amarillo).
-# Incluye el índice interno de la política de retención (.opendistro-ism-config),
-# que el plugin crea con 1 réplica.
-curl -s -X PUT "$OS/boletera-logs-*,cluster-logs-*,.opendistro-ism-config/_settings?expand_wildcards=all" \
+# Incluye los índices internos del plugin de retención: su configuración y
+# su historial diario, que el plugin crea con 1 réplica.
+curl -s -X PUT "$OS/_cluster/settings" -H "$JSON" \
+  -d '{"persistent":{"plugins.index_state_management.history.number_of_replicas":0}}'; echo
+curl -s -X PUT "$OS/boletera-logs-*,cluster-logs-*,.opendistro-ism-config,.opendistro-ism-managed-index-history-*/_settings?expand_wildcards=all" \
   -H "$JSON" -d '{"index":{"number_of_replicas":0}}'; echo
 curl -s "$OS/_cluster/health?wait_for_status=green&timeout=30s" | grep -o '"status":"[a-z]*"'
 
