@@ -102,11 +102,13 @@ spec:
         # 6 · Alerta de negocio del giro: evento con más de 90 % vendido.
         # svc-eventos tiene 2 réplicas y las dos publican la métrica: se toma
         # el máximo para tener una sola alerta por evento.
+        # Severidad "warning", no "info": kube-prometheus-stack silencia las
+        # alertas "info" (regla InfoInhibitor) y esta sí debe llegar al equipo.
         - alert: EventoCasiAgotado
           expr: |
             max by (namespace, service, evento_id, evento, artista, recinto) (boletera_porcentaje_vendido) > 90
           labels:
-            severity: info
+            severity: warning
             equipo: boletera
           annotations:
             summary: "{{ $labels.evento }} ({{ $labels.recinto }}) lleva {{ $value | printf \"%.1f\" }} % vendido."
