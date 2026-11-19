@@ -1,0 +1,33 @@
+# Lo propio de la boletera en el monitoreo · Argo CD: apps/monitoring.yaml
+# (kube-prometheus-stack se instala aparte: apps/kube-prometheus-stack.yaml,
+# con los valores de kube-prometheus-stack/values.yaml)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+resources:
+  - servicemonitors/frontend.yaml
+  - servicemonitors/svc-eventos.yaml
+  - servicemonitors/svc-reservaciones.yaml
+  - servicemonitors/svc-ordenes.yaml
+  - reglas/boletera.yaml
+  - alertmanager/telegram.yaml
+
+# Cada dashboard (JSON exportable de Grafana) se vuelve un ConfigMap con la
+# etiqueta grafana_dashboard=1: el sidecar de Grafana lo carga solo, en la
+# carpeta "Boletera". Editar un dashboard = cambiar su JSON y hacer push.
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+    app.kubernetes.io/part-of: boletera
+  annotations:
+    grafana_folder: Boletera
+
+configMapGenerator:
+  - name: dashboard-infraestructura
+    files: [dashboards/infraestructura.json]
+  - name: dashboard-aplicacion
+    files: [dashboards/aplicacion.json]
+  - name: dashboard-negocio
+    files: [dashboards/negocio.json]

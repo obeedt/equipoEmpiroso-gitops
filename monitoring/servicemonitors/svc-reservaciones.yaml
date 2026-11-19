@@ -1,0 +1,18 @@
+# Prometheus lee /metrics de svc-reservaciones (namespace tienda) cada 15 s
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: svc-reservaciones
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: boletera
+spec:
+  namespaceSelector:
+    matchNames: [tienda]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: svc-reservaciones
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

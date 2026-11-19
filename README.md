@@ -43,6 +43,9 @@ Solo desde equipos conectados a la tailnet del equipo:
 | **Tienda** | http://tienda.100.103.221.107.nip.io |
 | Argo CD | http://argocd.100.103.221.107.nip.io |
 | Tekton Dashboard (solo lectura) | http://tekton.100.103.221.107.nip.io |
+| Grafana | http://grafana.100.103.221.107.nip.io |
+| Prometheus | http://prometheus.100.103.221.107.nip.io |
+| Alertmanager | http://alertmanager.100.103.221.107.nip.io |
 
 ## Equipo
 

@@ -1,0 +1,46 @@
+# kube-prometheus-stack · Prometheus, Alertmanager, Grafana, node-exporter
+# y kube-state-metrics (namespace monitoring)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    # 1) El chart oficial, en versión fija
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 92.18.0
+      helm:
+        releaseName: kps
+        valueFiles:
+          - $values/monitoring/kube-prometheus-stack/values.yaml
+    # 2) Este repo, solo para leer el values.yaml de arriba ($values)
+    - repoURL: https://github.com/obeedt/equipoEmpiroso-gitops.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  # El job del chart escribe el certificado de los webhooks de admisión
+  # (caBundle) después de instalarlos; Argo CD no debe regresarlo a vacío.
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true          # las CRDs de Prometheus son muy grandes
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

@@ -27,6 +27,8 @@ Es el único `kubectl apply` del proyecto, y `root` se excluye a sí misma.
 | [`tekton-triggers.yaml`](tekton-triggers.yaml) | `tekton-triggers` | Tekton Triggers v0.37.2 + interceptores | `plataforma/tekton/triggers` | `tekton-pipelines` |
 | [`tekton-dashboard.yaml`](tekton-dashboard.yaml) | `tekton-dashboard` | Tekton Dashboard v0.74.0 (solo lectura) e Ingress | `plataforma/tekton/dashboard` | `tekton-pipelines` |
 | [`ci.yaml`](ci.yaml) | `ci` | Tasks, Pipeline y Triggers de la boletera | **`equipoEmpiroso-app/tekton`** | `ci` |
+| [`kube-prometheus-stack.yaml`](kube-prometheus-stack.yaml) | `kube-prometheus-stack` | Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics | chart `kube-prometheus-stack` 92.18.0 + `monitoring/kube-prometheus-stack/values.yaml` | `monitoring` |
+| [`monitoring.yaml`](monitoring.yaml) | `monitoring` | ServiceMonitors, 6 alertas, Telegram y 3 dashboards | `monitoring/` (Kustomize) | `monitoring` |
 
 Todas sincronizan solas (`automated`) con `selfHeal`: si alguien cambia algo a
 mano en el clúster, Argo CD lo regresa a lo que dice Git. Todas usan `prune`

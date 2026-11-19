@@ -1,0 +1,185 @@
+# kube-prometheus-stack 92.18.0 · Argo CD: apps/kube-prometheus-stack.yaml
+#
+# Prometheus, Alertmanager, Grafana, Prometheus Operator y kube-state-metrics
+# en k8s-w3 (rol "metricas"). node-exporter en los 4 nodos.
+# Lo propio de la boletera (ServiceMonitors, reglas, Telegram y dashboards)
+# va aparte, en monitoring/ (Application "monitoring").
+
+# Nombres cortos: kps-prometheus, kps-alertmanager, kps-operator...
+fullnameOverride: kps
+
+# ── Componentes del control plane ─────────────────────────────────────
+# kubeadm deja las métricas de etcd, kube-scheduler, kube-controller-manager
+# y kube-proxy solo en 127.0.0.1 de cada nodo: Prometheus no las alcanza y
+# aparecerían siempre DOWN, con alertas falsas. No se recolectan.
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+defaultRules:
+  create: true
+  rules:
+    etcd: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeControllerManager: false
+    kubeProxy: false
+
+# ── Prometheus Operator ───────────────────────────────────────────────
+prometheusOperator:
+  nodeSelector:
+    boletera.io/metricas: "true"
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 256Mi }
+  admissionWebhooks:
+    # Revisa ServiceMonitors y PrometheusRules antes de aceptarlos
+    patch:
+      nodeSelector:
+        boletera.io/metricas: "true"
+
+# ── Prometheus ────────────────────────────────────────────────────────
+prometheus:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - prometheus.100.103.221.107.nip.io
+    paths:
+      - /
+    pathType: Prefix
+  prometheusSpec:
+    nodeSelector:
+      boletera.io/metricas: "true"
+    externalUrl: http://prometheus.100.103.221.107.nip.io
+    scrapeInterval: 30s
+    retention: 7d
+    retentionSize: 8GB          # por debajo de los 10 GiB del volumen
+    resources:
+      requests: { cpu: 200m, memory: 512Mi }
+      limits: { memory: 1536Mi }
+    # Tomar TODOS los ServiceMonitors y PrometheusRules del clúster, no solo
+    # los que llevan la etiqueta "release" del chart
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path   # disco de k8s-w3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+# ── Alertmanager ──────────────────────────────────────────────────────
+alertmanager:
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - alertmanager.100.103.221.107.nip.io
+    paths:
+      - /
+    pathType: Prefix
+  alertmanagerSpec:
+    nodeSelector:
+      boletera.io/metricas: "true"
+    externalUrl: http://alertmanager.100.103.221.107.nip.io
+    retention: 120h
+    resources:
+      requests: { cpu: 10m, memory: 64Mi }
+      limits: { memory: 128Mi }
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+    # La ruta a Telegram está en monitoring/alertmanager/telegram.yaml
+    # (AlertmanagerConfig). "None": se aplica a las alertas de cualquier
+    # namespace (tienda, ci...), no solo a las de "monitoring".
+    alertmanagerConfigSelector:
+      matchLabels:
+        boletera.io/alertmanager: "true"
+    alertmanagerConfigMatcherStrategy:
+      type: None
+
+# ── Grafana ───────────────────────────────────────────────────────────
+grafana:
+  nodeSelector:
+    boletera.io/metricas: "true"
+  # Usuario y contraseña en el Secret "grafana-admin", creado a mano
+  # (no en Git). Sin esto el chart usaría una contraseña conocida.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - grafana.100.103.221.107.nip.io
+    path: /
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: local-path
+    accessModes: ["ReadWriteOnce"]
+    size: 1Gi
+  # Con un volumen ReadWriteOnce, el pod viejo se detiene antes de crear el nuevo
+  deploymentStrategy:
+    type: Recreate
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits: { memory: 512Mi }
+  defaultDashboardsTimezone: America/Mexico_City
+  grafana.ini:
+    server:
+      root_url: http://grafana.100.103.221.107.nip.io
+    analytics:
+      reporting_enabled: false
+      check_for_updates: false
+  sidecar:
+    dashboards:
+      # Los 3 dashboards de la boletera (monitoring/dashboards) van a la
+      # carpeta que diga su anotación "grafana_folder"
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+    resources:
+      requests: { cpu: 10m, memory: 64Mi }
+      limits: { memory: 128Mi }
+
+# ── kube-state-metrics y node-exporter ────────────────────────────────
+kube-state-metrics:
+  nodeSelector:
+    boletera.io/metricas: "true"
+  resources:
+    requests: { cpu: 10m, memory: 48Mi }
+    limits: { memory: 128Mi }
+
+prometheus-node-exporter:
+  # En los 4 nodos, también en el control plane (ahí está el disco del NFS)
+  tolerations:
+    - operator: Exists
+      effect: NoSchedule
+  resources:
+    requests: { cpu: 10m, memory: 24Mi }
+    limits: { memory: 64Mi }
+  prometheus:
+    monitor:
+      # "instance" = nombre del nodo (k8s-w1...) en vez de IP:puerto
+      relabelings:
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: instance

@@ -1,0 +1,42 @@
+# Alertmanager → grupo de Telegram del equipo
+#
+# Solo las alertas con "equipo: boletera" (monitoring/reglas/boletera.yaml).
+# El token del bot está en el Secret "telegram-bot" (clave "token"), creado
+# a mano: nunca en Git. El chat ID identifica al grupo; sin el token no sirve
+# para enviar nada.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: telegram
+  namespace: monitoring
+  labels:
+    boletera.io/alertmanager: "true"     # lo selecciona el Alertmanager (values.yaml)
+spec:
+  route:
+    receiver: telegram
+    matchers:
+      - name: equipo
+        value: boletera
+        matchType: "="
+    groupBy: [alertname, namespace, service]
+    groupWait: 30s          # junta las alertas que llegan casi juntas
+    groupInterval: 2m
+    repeatInterval: 4h      # recordatorio si la alerta sigue activa
+  receivers:
+    - name: telegram
+      telegramConfigs:
+        - botToken:
+            name: telegram-bot
+            key: token
+          chatID: -5428043398   # grupo de alertas del equipo (los grupos tienen ID negativo)
+          sendResolved: true
+          parseMode: HTML
+          # alerta, severidad, namespace y servicio afectado (lo que pide el proyecto)
+          message: |-
+            {{ range .Alerts }}{{ if eq .Status "firing" }}🔴 <b>ALERTA</b>{{ else }}✅ <b>RESUELTA</b>{{ end }} · <b>{{ .Labels.alertname }}</b>
+            <b>Severidad:</b> {{ .Labels.severity }}
+            <b>Namespace:</b> {{ or .Labels.namespace "—" }}
+            <b>Servicio:</b> {{ or .Labels.service .Labels.container .Labels.node .Labels.instance "—" | html }}
+            {{ .Annotations.summary | html }}
+
+            {{ end }}

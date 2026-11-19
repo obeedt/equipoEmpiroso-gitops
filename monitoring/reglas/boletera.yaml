@@ -1,0 +1,113 @@
+# Las 6 alertas de la boletera. Todas llevan "equipo: boletera": solo esas
+# llegan a Telegram (monitoring/alertmanager/telegram.yaml). Las reglas que
+# trae kube-prometheus-stack se ven en Prometheus, pero no se envían.
+#
+# Etiquetas que usa el mensaje de Telegram: severity, namespace y service
+# (o node / instance / container, según la alerta).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: boletera
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: boletera
+spec:
+  groups:
+    - name: boletera.servicios
+      rules:
+        # 1 · Microservicio caído: su /metrics no responde (up == 0) o su
+        # Deployment se quedó sin réplicas disponibles (así también se detecta
+        # un servicio apagado, que ya no tiene target que revisar).
+        - alert: MicroservicioCaido
+          expr: |
+            (sum by (namespace, service) (up{namespace="tienda", service=~"frontend|svc-.*"}) == 0)
+            or
+            (max by (namespace, service) (
+              label_replace(
+                kube_deployment_status_replicas_available{namespace="tienda", deployment=~"frontend|svc-.*"},
+                "service", "$1", "deployment", "(.*)")
+            ) == 0)
+          for: 1m
+          labels:
+            severity: critical
+            equipo: boletera
+          annotations:
+            summary: "{{ $labels.service }} no responde: ninguna réplica disponible."
+            description: "Prometheus no puede leer /metrics de {{ $labels.service }} o su Deployment tiene 0 réplicas listas desde hace más de 1 minuto."
+
+        # 5 · Errores 5xx arriba de 5 % durante 5 minutos. No cuenta /health
+        # ni /metrics: son peticiones de Kubernetes y de Prometheus, no de
+        # clientes, y diluirían el porcentaje.
+        - alert: Errores5xxAltos
+          expr: |
+            (
+              sum by (namespace, service) (rate(http_requests_total{namespace="tienda", status=~"5..", route!~"/health.*|/metrics"}[5m]))
+              /
+              sum by (namespace, service) (rate(http_requests_total{namespace="tienda", route!~"/health.*|/metrics"}[5m]))
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+            equipo: boletera
+          annotations:
+            summary: "{{ $labels.service }} responde con error 5xx al {{ $value | humanizePercentage }} de las peticiones."
+            description: "Más de 5 % de errores 5xx durante 5 minutos."
+
+    - name: boletera.kubernetes
+      rules:
+        # 2 · Pod reiniciándose repetidamente (por ejemplo, CrashLoopBackOff)
+        - alert: PodReiniciandose
+          expr: |
+            max by (namespace, pod, container) (
+              increase(kube_pod_container_status_restarts_total[15m])
+            ) > 3
+          for: 1m
+          labels:
+            severity: warning
+            equipo: boletera
+          annotations:
+            summary: "El contenedor {{ $labels.container }} del pod {{ $labels.pod }} se reinició {{ $value | printf \"%.0f\" }} veces en 15 min."
+            description: "Revisar con: kubectl -n {{ $labels.namespace }} logs {{ $labels.pod }} -c {{ $labels.container }} --previous"
+
+        # 3 · Nodo NotReady
+        - alert: NodoNoListo
+          expr: |
+            max by (node) (kube_node_status_condition{condition="Ready", status="true"}) == 0
+          for: 2m
+          labels:
+            severity: critical
+            equipo: boletera
+          annotations:
+            summary: "El nodo {{ $labels.node }} está NotReady."
+            description: "Sus pods no reciben cambios y, si no vuelve, Kubernetes los moverá a otros nodos."
+
+    - name: boletera.infraestructura
+      rules:
+        # 4 · Disco arriba de 80 %: la raíz de cada nodo y el disco del NFS
+        # (/srv/nfs en k8s-cp, donde vive PostgreSQL)
+        - alert: DiscoCasiLleno
+          expr: |
+            100 * (1 - node_filesystem_avail_bytes{mountpoint=~"/|/srv/nfs", fstype="xfs"}
+                     / node_filesystem_size_bytes{mountpoint=~"/|/srv/nfs", fstype="xfs"}) > 80
+          for: 5m
+          labels:
+            severity: warning
+            equipo: boletera
+          annotations:
+            summary: "{{ $labels.mountpoint }} en {{ $labels.instance }} está al {{ $value | printf \"%.0f\" }} %."
+            description: "Arriba de 80 % de uso. Con el disco lleno fallan los pods, las imágenes nuevas y, en /srv/nfs, la base de datos."
+
+    - name: boletera.negocio
+      rules:
+        # 6 · Alerta de negocio del giro: evento con más de 90 % vendido.
+        # svc-eventos tiene 2 réplicas y las dos publican la métrica: se toma
+        # el máximo para tener una sola alerta por evento.
+        - alert: EventoCasiAgotado
+          expr: |
+            max by (namespace, service, evento_id, evento, artista, recinto) (boletera_porcentaje_vendido) > 90
+          labels:
+            severity: info
+            equipo: boletera
+          annotations:
+            summary: "{{ $labels.evento }} ({{ $labels.recinto }}) lleva {{ $value | printf \"%.1f\" }} % vendido."
+            description: "Quedan menos del 10 % de los boletos: momento de abrir otra fecha o subir precios."

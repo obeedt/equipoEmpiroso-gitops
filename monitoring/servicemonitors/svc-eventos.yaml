@@ -1,0 +1,18 @@
+# Prometheus lee /metrics de svc-eventos (namespace tienda) cada 15 s
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: svc-eventos
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: boletera
+spec:
+  namespaceSelector:
+    matchNames: [tienda]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: svc-eventos
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
