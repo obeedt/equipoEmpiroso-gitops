@@ -35,5 +35,6 @@ afecte a los volúmenes existentes.
 
 Más detalle en [`docs/02-argocd.md`](../docs/02-argocd.md),
 [`docs/03-ingress-y-almacenamiento.md`](../docs/03-ingress-y-almacenamiento.md),
-[`docs/04-postgresql.md`](../docs/04-postgresql.md) y
-[`docs/05-microservicios.md`](../docs/05-microservicios.md).
+[`docs/04-postgresql.md`](../docs/04-postgresql.md),
+[`docs/05-microservicios.md`](../docs/05-microservicios.md) y
+[`docs/06-tekton.md`](../docs/06-tekton.md).

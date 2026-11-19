@@ -3,8 +3,10 @@
 # El documento del proyecto pide que las Tasks, el Pipeline, el TriggerTemplate
 # y el EventListener vivan en el repo de la aplicación (equipoEmpiroso-app/tekton).
 # Esta Application los lee de ahí, así que también se despliegan por GitOps.
-# Solo se aplica la carpeta tekton/ (no sus subcarpetas: manual/ es para
-# lanzar ejecuciones a mano).
+# Solo se aplica la carpeta tekton/, no sus subcarpetas (manual/ es para
+# lanzar ejecuciones a mano). Es el comportamiento por defecto de Argo CD;
+# no se escribe "directory: recurse: false" porque Kubernetes quita ese valor
+# al guardar y "root" vería siempre una diferencia (OutOfSync).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -16,8 +18,6 @@ spec:
     repoURL: https://github.com/obeedt/equipoEmpiroso-app.git
     targetRevision: main
     path: tekton
-    directory:
-      recurse: false
   destination:
     server: https://kubernetes.default.svc
     namespace: ci

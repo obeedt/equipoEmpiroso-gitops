@@ -29,4 +29,5 @@ valor del manifiesto, rompiendo los webhooks.
 
 Las Tasks, el Pipeline y los Triggers de la boletera están en
 [`equipoEmpiroso-app/tekton`](https://github.com/obeedt/equipoEmpiroso-app/tree/main/tekton)
-(Application `ci`).
+(Application `ci`). La documentación completa de la etapa está en
+[`docs/06-tekton.md`](../../docs/06-tekton.md).
