@@ -142,7 +142,7 @@ de observabilidad, que cubre el video de respaldo.
 | Swap | Apagada | El kubelet, por defecto, no arranca con swap activa; la memoria de los pods se calcula sin contar swap | ✅ sin partición de swap |
 | Conectividad | Todos los nodos se alcanzan entre sí | API 6443, kubelet 10250, VXLAN 8472/udp, NFS 2049 | ✅ por Tailscale |
 | Identidad única | hostname, MAC y `product_uuid` distintos por nodo | El clúster identifica a cada nodo por su nombre | ✅ (VMs creadas desde cero, no clonadas) |
-| Hora sincronizada | NTP activo | Certificados y etcd fallan con relojes desfasados | ✅ chronyd en todos |
+| Hora sincronizada | NTP activo | Certificados y etcd fallan con relojes desfasados | ✅ chronyd en todos, con salto inmediato si se desfasa (sección 15) |
 
 ### 4.2 Recomendados para este proyecto
 
@@ -788,6 +788,7 @@ cd ~/k8s-boletera-flannel && ansible-playbook site.yml     # sin sudo
 | Comprobar que `ansible_host` es de Tailscale y coincide con `tailscale0` | Detiene la instalación antes de romper algo si el inventario está mal. |
 | `/etc/hosts` con los 4 nodos y `k8s-api.boletera` | Resolución por nombre sin depender de un DNS externo. |
 | DNS del nodo: ninguno en `100.64.0.0/10` y sin dominio de búsqueda del DHCP | Sección 10. |
+| chronyd con `makestep 1.0 -1` | Corrige la hora de golpe en cuanto se desfasa más de 1 s, también al despertar las VMs de VMware tras suspender la laptop. Rocky trae `makestep 1.0 3`, que solo salta la hora al arrancar y después la ajusta muy despacio. |
 | Swap apagada y comentada en `/etc/fstab` | Refuerzo, aunque ya se instaló sin swap. |
 | Paquetes: `nfs-utils`, `iproute-tc`, `tar`, `jq` | `nfs-utils` lo usa el kubelet para montar los volúmenes NFS. |
 | Módulos `overlay`, `br_netfilter`, `vxlan` | El sistema de archivos de los contenedores, el filtrado del tráfico de los bridges y el túnel de Flannel. |
@@ -988,6 +989,7 @@ corren la primera vez (`kubeadm init`, `join`, formatear el disco NFS).
 | 11 | git y Helm instalados a mano en el control plane para el bootstrap de Argo CD | No eran parte de la instalación | Ahora los instala el playbook 03, con Helm verificado por SHA-256 (sección 15). |
 | 12 | Traefik en `ImagePullBackOff`: `auth.docker.io ... i/o timeout` | Cloudflare (donde está el servicio de tokens de Docker Hub) no respondía desde la red de casa | Espejo de Docker Hub `mirror.gcr.io` en containerd, configurado por el playbook 01 (sección 15.1). |
 | 13 | Nodos de Proxmox: cada consulta DNS tardaba 5 s | Su primer DNS era `1.1.1.1` (Cloudflare), que no respondía | DNS `8.8.8.8` y `9.9.9.9`, ninguno de Cloudflare (sección 10.2). |
+| 14 | Un PipelineRun de Tekton expiraba (`PipelineRunTimeout`) al instante, sin llegar a crear pods | Tras suspender la laptop, k8s-cp y k8s-w1 despertaron 2 h 51 min atrasados. El API server fechó la ejecución con esa hora y el controlador de Tekton, en k8s-w3, la midió con la hora real. chronyd no saltaba la hora porque Rocky solo lo permite al arrancar. | `makestep 1.0 -1` en chronyd, configurado por el playbook 01 (sección 15). |
 
 ---
 

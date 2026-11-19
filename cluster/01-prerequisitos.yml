@@ -28,6 +28,11 @@
       ansible.builtin.command: firewall-cmd --reload
       changed_when: false
 
+    - name: Reiniciar chronyd
+      ansible.builtin.service:
+        name: chronyd
+        state: restarted
+
     # Aplica el cambio de DNS sin tirar la red (no corta SSH ni Tailscale)
     - name: Aplicar DNS
       ansible.builtin.command: "nmcli device reapply {{ ansible_facts.default_ipv4.interface }}"
@@ -105,6 +110,26 @@
       failed_when: dns_ipv4 | length == 0
       changed_when: true
       notify: Aplicar DNS
+
+    # ── Hora ──────────────────────────────────────────────────────────
+    # Rocky trae "makestep 1.0 3": chronyd solo salta la hora en sus 3
+    # primeras mediciones y después la corrige poco a poco. Cuando la laptop
+    # se suspende, las VMs de VMware despiertan con horas de atraso y tardan
+    # días en alcanzar la hora real. Con -1 salta en cualquier momento si la
+    # diferencia pasa de 1 s. Kubernetes compara horas de nodos distintos
+    # (tokens, plazos de Tekton, certificados), así que deben coincidir.
+    - name: chronyd corrige la hora de golpe siempre que se desfase más de 1 s
+      ansible.builtin.lineinfile:
+        path: /etc/chrony.conf
+        regexp: '^makestep\s'
+        line: makestep 1.0 -1
+      notify: Reiniciar chronyd
+
+    - name: chronyd habilitado
+      ansible.builtin.service:
+        name: chronyd
+        state: started
+        enabled: true
 
     # ── Swap (kubelet no arranca con swap activo) ─────────────────────
     - name: Apagar swap ahora
