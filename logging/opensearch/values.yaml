@@ -40,6 +40,34 @@ persistence:
   image: busybox
   imageTag: "1.37.0"
 
+# Plantilla de los índices de logs, ANTES de que Fluent Bit pueda escribir:
+# mientras este postStart no termina, el pod no está listo y el Service no
+# le manda tráfico. Así el primer índice del día ya nace con 1 shard, sin
+# réplicas y con nivel/servicio/trace_id como keyword. Es la misma plantilla
+# que aplica el Job de logging/configuracion (plantilla-logs.json).
+opensearchLifecycle:
+  postStart:
+    exec:
+      command:
+        - bash
+        - -c
+        - |
+          for i in $(seq 1 90); do
+            curl -s -o /dev/null http://localhost:9200 && break
+            sleep 2
+          done
+          curl -s -o /dev/null -X PUT http://localhost:9200/_index_template/logs-boletera \
+            -H 'Content-Type: application/json' -d '{
+              "index_patterns": ["boletera-logs-*", "cluster-logs-*"],
+              "priority": 100,
+              "template": {
+                "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+                "mappings": { "properties": {
+                  "nivel": { "type": "keyword" }, "servicio": { "type": "keyword" },
+                  "trace_id": { "type": "keyword" }, "span_id": { "type": "keyword" },
+                  "logger": { "type": "keyword" }, "mensaje": { "type": "text" },
+                  "log": { "type": "text" } } } } }' || true
+
 # vm.max_map_count=262144 ya lo pone el playbook 01 del clúster en los nodos
 sysctlInit:
   enabled: false
