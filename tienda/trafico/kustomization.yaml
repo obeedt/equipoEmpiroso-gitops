@@ -1,0 +1,16 @@
+# Generador de tráfico (apagado por defecto) · Argo CD: apps/trafico.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: tienda
+
+resources:
+  - cronjob.yaml
+
+configMapGenerator:
+  - name: trafico-script
+    files: [trafico.py]
+    options:
+      disableNameSuffixHash: true
+      labels:
+        app.kubernetes.io/name: trafico
+        app.kubernetes.io/part-of: boletera

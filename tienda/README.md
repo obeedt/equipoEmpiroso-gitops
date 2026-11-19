@@ -10,11 +10,32 @@ worker con el rol `app` (k8s-w1).
 | [`svc-reservaciones/`](svc-reservaciones/) | Carrito: bloqueo temporal de asientos | ✅ |
 | [`svc-ordenes/`](svc-ordenes/) | Pago y pedidos | ✅ |
 | [`frontend/`](frontend/) | Sitio web · 2 réplicas · Ingress **http://tienda.100.103.221.107.nip.io** | ✅ |
+| [`trafico/`](trafico/) | Generador de tráfico para pruebas y demos · **apagado por defecto** | ✅ |
 
 Cada carpeta de servicio tiene su `kustomization.yaml` con la etiqueta de la
 imagen (`newTag` = SHA del commit en `equipoEmpiroso-app`). Desplegar una
 versión nueva es cambiar esa línea; el pipeline de Tekton lo hará solo.
 Detalle en [`docs/05-microservicios.md`](../docs/05-microservicios.md).
+
+## Generador de tráfico (`trafico/`)
+
+Recorre la tienda como un cliente: catálogo, página de un concierto, cada 5
+clientes aparta 2 lugares y cancela el carrito, y consulta un pedido. Así los
+dashboards de aplicación tienen peticiones y latencia, y con `ERROR_RATE` se
+pueden ver los errores 5xx. **Nunca paga**: no cambia los boletos vendidos.
+
+Es un CronJob **suspendido**: no corre hasta que se lanza una ejecución, que
+dura 20 minutos (unas 2 peticiones/s entre los 4 servicios) y termina sola.
+
+```bash
+kubectl -n tienda create job trafico-$(date +%H%M) --from=cronjob/trafico   # encender
+kubectl -n tienda logs -f -l app.kubernetes.io/name=trafico                 # ver el resumen cada minuto
+kubectl -n tienda delete job -l app.kubernetes.io/name=trafico              # apagar antes de tiempo
+```
+
+Lanzarlo o detenerlo no cambia nada de Git: Argo CD sigue en Synced. La
+duración, la pausa entre clientes y el pedido que consulta están en
+`trafico/cronjob.yaml`.
 
 ## PostgreSQL (`postgres/`)
 

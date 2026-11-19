@@ -22,6 +22,15 @@ Monitoreo y alertas, en el namespace `monitoring` y en **k8s-w3** (rol
 | Grafana | 13.3.0 |
 | kube-state-metrics / node-exporter | v2.20.0 / v1.12.1 |
 
+Los paneles de peticiones, errores y latencia solo cuentan tráfico de
+clientes (no `/health` ni `/metrics`). Para probarlos sin navegar la tienda a
+mano está el generador de tráfico de [`tienda/trafico`](../tienda/trafico/),
+apagado por defecto:
+
+```bash
+kubectl -n tienda create job trafico-$(date +%H%M) --from=cronjob/trafico   # 20 min de tráfico
+```
+
 ## Accesos (solo desde la tailnet)
 
 | Aplicación | URL |
