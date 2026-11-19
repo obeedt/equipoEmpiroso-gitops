@@ -1,0 +1,31 @@
+# OpenSearch Dashboards 3.9.0 · consulta de logs en http://opensearch.100.103.221.107.nip.io
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: opensearch-dashboards
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    # 1) El chart oficial, en versión fija
+    - repoURL: https://opensearch-project.github.io/helm-charts
+      chart: opensearch-dashboards
+      targetRevision: 3.9.0
+      helm:
+        releaseName: opensearch-dashboards
+        valueFiles:
+          - $values/logging/opensearch-dashboards/values.yaml
+    # 2) Este repo, solo para leer el values.yaml de arriba ($values)
+    - repoURL: https://github.com/obeedt/equipoEmpiroso-gitops.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

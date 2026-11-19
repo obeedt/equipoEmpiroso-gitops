@@ -1,0 +1,35 @@
+# Jaeger y la configuración de OpenSearch · Argo CD: apps/logging.yaml
+# (OpenSearch, Dashboards y Fluent Bit se instalan con sus charts:
+# apps/opensearch.yaml, apps/opensearch-dashboards.yaml, apps/fluent-bit.yaml,
+# con los valores de logging/<componente>/values.yaml)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: logging
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: boletera
+    includeSelectors: false
+
+resources:
+  - jaeger/jaeger.yaml
+  - configuracion/job.yaml
+
+configMapGenerator:
+  # Con hash en el nombre: al cambiar la configuración, Jaeger se reinicia solo
+  - name: jaeger-config
+    files:
+      - jaeger/config.yaml
+      - jaeger/ui.json
+  # Sin hash: el Job (hook de Argo CD) se vuelve a crear en cada sincronización
+  - name: configuracion-opensearch
+    options:
+      disableNameSuffixHash: true
+    files:
+      - configuracion/configurar.sh
+      - configuracion/plantilla-logs.json
+      - configuracion/retencion-7-dias.json
+      - configuracion/patron-boletera-logs.json
+      - configuracion/patron-cluster-logs.json
+      - configuracion/busqueda-errores.json
+      - configuracion/ajustes-dashboards.json

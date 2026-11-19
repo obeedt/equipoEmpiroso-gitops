@@ -1,0 +1,66 @@
+# Jaeger 2.22.0: recibe trazas por OTLP, las guarda en OpenSearch y sirve la UI.
+# Basado en cmd/jaeger/config-opensearch.yaml de Jaeger v2.22.0.
+service:
+  extensions: [jaeger_storage, jaeger_query, healthcheckv2]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]
+  telemetry:
+    resource:
+      service.name: jaeger
+    metrics:
+      level: basic
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+    logs:
+      level: info
+
+extensions:
+  healthcheckv2:
+    use_v2: true
+    http:
+      endpoint: 0.0.0.0:13133
+
+  jaeger_query:
+    storage:
+      traces: opensearch
+    ui:
+      # Enlace de cada traza a sus logs en OpenSearch Dashboards
+      config_file: /etc/jaeger/ui.json
+
+  jaeger_storage:
+    backends:
+      opensearch:
+        opensearch:
+          server_urls:
+            - http://opensearch-cluster-master.logging.svc:9200
+          indices:
+            # Índices: boletera-jaeger-span-AAAA-MM-DD, boletera-jaeger-service-…
+            index_prefix: boletera
+            # Un solo nodo de OpenSearch: 1 shard y sin réplicas (con réplicas
+            # los índices quedarían en amarillo para siempre)
+            spans: { date_layout: "2006-01-02", rollover_frequency: day, shards: 1, replicas: 0 }
+            services: { date_layout: "2006-01-02", rollover_frequency: day, shards: 1, replicas: 0 }
+            dependencies: { date_layout: "2006-01-02", rollover_frequency: day, shards: 1, replicas: 0 }
+            sampling: { date_layout: "2006-01-02", rollover_frequency: day, shards: 1, replicas: 0 }
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318     # el que usan los servicios (OTLP/HTTP)
+
+processors:
+  batch:
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: opensearch

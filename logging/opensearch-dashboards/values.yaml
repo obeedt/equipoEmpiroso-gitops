@@ -1,0 +1,35 @@
+# OpenSearch Dashboards 3.9.0 (chart 3.9.0) · Argo CD: apps/opensearch-dashboards.yaml
+#
+# Donde se consultan los logs: http://opensearch.100.103.221.107.nip.io
+# El index pattern, la búsqueda "Errores de la tienda" y el enlace de
+# trace_id a Jaeger los crea el Job de logging/configuracion/.
+
+opensearchHosts: "http://opensearch-cluster-master:9200"
+
+nodeSelector:
+  boletera.io/logs: "true"
+
+resources:
+  requests: { cpu: 100m, memory: 512Mi }
+  limits: { memory: 1Gi }
+
+# OpenSearch corre sin el plugin de seguridad (ver logging/opensearch/values.yaml)
+extraEnvs:
+  - name: DISABLE_SECURITY_DASHBOARDS_PLUGIN
+    value: "true"
+config:
+  opensearch_dashboards.yml: |
+    server.host: 0.0.0.0
+    server.name: boletera
+    opensearch.hosts: ["http://opensearch-cluster-master:9200"]
+
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  hosts:
+    - host: opensearch.100.103.221.107.nip.io
+      paths:
+        - path: /
+          backend:
+            serviceName: ""
+            servicePort: ""

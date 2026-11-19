@@ -1,0 +1,9 @@
+{
+  "linkPatterns": [
+    {
+      "type": "traces",
+      "url": "http://opensearch.100.103.221.107.nip.io/app/data-explorer/discover#?_a=(discover:(columns:!(servicio,nivel,mensaje,trace_id),sort:!()),metadata:(indexPattern:'boletera-logs',view:discover))&_g=(filters:!(),time:(from:now-7d,to:now))&_q=(filters:!(),query:(language:kuery,query:'trace_id:#{traceID}'))",
+      "text": "Ver los logs de esta traza en OpenSearch"
+    }
+  ]
+}

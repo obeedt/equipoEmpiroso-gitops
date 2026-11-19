@@ -30,6 +30,10 @@ Es el único `kubectl apply` del proyecto, y `root` se excluye a sí misma.
 | [`trafico.yaml`](trafico.yaml) | `trafico` | Generador de tráfico (CronJob suspendido, se lanza a mano) | `tienda/trafico` (Kustomize) | `tienda` |
 | [`kube-prometheus-stack.yaml`](kube-prometheus-stack.yaml) | `kube-prometheus-stack` | Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics | chart `kube-prometheus-stack` 92.18.0 + `monitoring/kube-prometheus-stack/values.yaml` | `monitoring` |
 | [`monitoring.yaml`](monitoring.yaml) | `monitoring` | ServiceMonitors, 6 alertas, Telegram y 3 dashboards | `monitoring/` (Kustomize) | `monitoring` |
+| [`opensearch.yaml`](opensearch.yaml) | `opensearch` | OpenSearch 3.9.0 (logs y trazas) | chart `opensearch` 3.9.0 + `logging/opensearch/values.yaml` | `logging` |
+| [`opensearch-dashboards.yaml`](opensearch-dashboards.yaml) | `opensearch-dashboards` | OpenSearch Dashboards 3.9.0 | chart `opensearch-dashboards` 3.9.0 + `logging/opensearch-dashboards/values.yaml` | `logging` |
+| [`fluent-bit.yaml`](fluent-bit.yaml) | `fluent-bit` | Fluent Bit 5.1.2 en los 4 nodos | chart `fluent-bit` 0.58.2 + `logging/fluent-bit/values.yaml` | `logging` |
+| [`logging.yaml`](logging.yaml) | `logging` | Jaeger 2.22.0 y la configuración de OpenSearch | `logging/` (Kustomize) | `logging` |
 
 Todas sincronizan solas (`automated`) con `selfHeal`: si alguien cambia algo a
 mano en el clúster, Argo CD lo regresa a lo que dice Git. Todas usan `prune`

@@ -1,0 +1,6 @@
+{
+  "attributes": {
+    "title": "cluster-logs-*",
+    "timeFieldName": "@timestamp"
+  }
+}

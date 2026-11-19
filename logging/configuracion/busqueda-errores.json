@@ -1,0 +1,14 @@
+{
+  "attributes": {
+    "title": "Errores de la tienda",
+    "description": "Logs con nivel ERROR de los 4 servicios. Un clic en trace_id abre la traza en Jaeger.",
+    "columns": ["servicio", "mensaje", "trace_id"],
+    "sort": [["@timestamp", "desc"]],
+    "kibanaSavedObjectMeta": {
+      "searchSourceJSON": "{\"query\":{\"query\":\"nivel:ERROR\",\"language\":\"kuery\"},\"filter\":[],\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\"}"
+    }
+  },
+  "references": [
+    { "name": "kibanaSavedObjectMeta.searchSourceJSON.index", "type": "index-pattern", "id": "boletera-logs" }
+  ]
+}

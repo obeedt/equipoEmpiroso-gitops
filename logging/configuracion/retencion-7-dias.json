@@ -1,0 +1,21 @@
+{
+  "policy": {
+    "description": "Logs y trazas de la boletera: se borran a los 7 días",
+    "default_state": "activo",
+    "states": [
+      {
+        "name": "activo",
+        "actions": [],
+        "transitions": [{ "state_name": "borrar", "conditions": { "min_index_age": "7d" } }]
+      },
+      {
+        "name": "borrar",
+        "actions": [{ "delete": {} }],
+        "transitions": []
+      }
+    ],
+    "ism_template": [
+      { "index_patterns": ["boletera-logs-*", "cluster-logs-*", "boletera-jaeger-*"], "priority": 100 }
+    ]
+  }
+}

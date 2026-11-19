@@ -1,0 +1,31 @@
+# OpenSearch 3.9.0 · guarda los logs (Fluent Bit) y las trazas (Jaeger) · k8s-w2
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: opensearch
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    # 1) El chart oficial, en versión fija
+    - repoURL: https://opensearch-project.github.io/helm-charts
+      chart: opensearch
+      targetRevision: 3.9.0
+      helm:
+        releaseName: opensearch
+        valueFiles:
+          - $values/logging/opensearch/values.yaml
+    # 2) Este repo, solo para leer el values.yaml de arriba ($values)
+    - repoURL: https://github.com/obeedt/equipoEmpiroso-gitops.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

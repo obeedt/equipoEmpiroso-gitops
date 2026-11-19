@@ -32,7 +32,9 @@ El código de los microservicios y el pipeline de Tekton están en
 | 5 · Microservicios de la tienda | ✅ Listo · [documentación](docs/05-microservicios.md) |
 | 6 · CI con Tekton (webhook por Tailscale Funnel) | ✅ Listo · [documentación](docs/06-tekton.md) |
 | 7 · Monitoreo y alertas (Prometheus, Grafana, Telegram) | ✅ Listo · [documentación](docs/07-monitoreo-y-alertas.md) |
-| Logs y trazas | Pendiente |
+| 8 · Logs y trazas (Fluent Bit, OpenSearch, Jaeger) | 🚧 En curso |
+
+Lo que sigue después de cumplir los rubros: [mejoras siguientes](docs/mejoras.md).
 
 ## Accesos
 
@@ -46,6 +48,8 @@ Solo desde equipos conectados a la tailnet del equipo:
 | Grafana | http://grafana.100.103.221.107.nip.io |
 | Prometheus | http://prometheus.100.103.221.107.nip.io |
 | Alertmanager | http://alertmanager.100.103.221.107.nip.io |
+| OpenSearch Dashboards (logs) | http://opensearch.100.103.221.107.nip.io |
+| Jaeger (trazas) | http://jaeger.100.103.221.107.nip.io |
 
 ## Equipo
 

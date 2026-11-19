@@ -1,0 +1,18 @@
+{
+  "index_patterns": ["boletera-logs-*", "cluster-logs-*"],
+  "priority": 100,
+  "template": {
+    "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+    "mappings": {
+      "properties": {
+        "nivel":    { "type": "keyword" },
+        "servicio": { "type": "keyword" },
+        "trace_id": { "type": "keyword" },
+        "span_id":  { "type": "keyword" },
+        "logger":   { "type": "keyword" },
+        "mensaje":  { "type": "text" },
+        "log":      { "type": "text" }
+      }
+    }
+  }
+}

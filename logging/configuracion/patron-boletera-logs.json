@@ -1,0 +1,7 @@
+{
+  "attributes": {
+    "title": "boletera-logs-*",
+    "timeFieldName": "@timestamp",
+    "fieldFormatMap": "{\"trace_id\":{\"id\":\"url\",\"params\":{\"urlTemplate\":\"http://jaeger.100.103.221.107.nip.io/trace/{{value}}\",\"labelTemplate\":\"{{value}}\"}}}"
+  }
+}

@@ -32,6 +32,7 @@ Misma estructura en todas las etapas, para que se puedan comparar y revisar:
 
 ## Otros contenidos
 
+- **[mejoras.md](mejoras.md)**: lo siguiente que se mejoraría después de cumplir los rubros, y los detalles por pulir.
 - **[evidencias/](evidencias/)**: capturas y archivos que muestran que cada parte funciona.
 - **Diagrama de arquitectura** de la plataforma (pendiente).
 - **Presentación** final en PDF (pendiente).

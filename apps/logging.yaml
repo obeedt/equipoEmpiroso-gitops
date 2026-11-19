@@ -1,0 +1,24 @@
+# Jaeger 2.22.0 (trazas, guardadas en OpenSearch) y el Job que configura
+# OpenSearch y Dashboards: retención de 7 días, plantillas de índices,
+# index patterns, búsqueda "Errores de la tienda" y enlace trace_id → Jaeger.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: logging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/obeedt/equipoEmpiroso-gitops.git
+    targetRevision: main
+    path: logging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }

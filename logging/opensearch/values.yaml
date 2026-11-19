@@ -1,0 +1,45 @@
+# OpenSearch 3.9.0 (chart 3.9.0) · Argo CD: apps/opensearch.yaml
+#
+# Un solo nodo en k8s-w2 (rol "logs"). Guarda los logs (Fluent Bit) y las
+# trazas (Jaeger). Service: opensearch-cluster-master:9200 (namespace logging).
+
+singleNode: true          # discovery.type=single-node, 1 réplica
+
+nodeSelector:
+  boletera.io/logs: "true"
+
+# Heap de 1 GiB: la mitad de la memoria del contenedor (lo recomendado por
+# OpenSearch); el resto lo usa el sistema para leer los índices.
+opensearchJavaOpts: "-Xms1g -Xmx1g"
+resources:
+  requests: { cpu: 250m, memory: 1536Mi }
+  limits: { memory: 2Gi }
+
+# Sin el plugin de seguridad: HTTP sin TLS ni usuarios. Solo lo alcanzan los
+# pods del clúster y, por Dashboards, los equipos de la tailnet (igual que
+# Prometheus). Activarlo es una de las mejoras pendientes (docs/mejoras.md).
+protocol: http
+securityConfig:
+  enabled: false
+extraEnvs:
+  - name: DISABLE_INSTALL_DEMO_CONFIG
+    value: "true"
+  - name: DISABLE_SECURITY_PLUGIN
+    value: "true"
+config:
+  opensearch.yml: |
+    cluster.name: boletera
+    network.host: 0.0.0.0
+    plugins.security.disabled: true
+
+persistence:
+  enabled: true
+  storageClass: local-path    # disco de k8s-w2
+  size: 20Gi
+  # El initContainer que ajusta permisos del volumen: versión fija, no "latest"
+  image: busybox
+  imageTag: "1.37.0"
+
+# vm.max_map_count=262144 ya lo pone el playbook 01 del clúster en los nodos
+sysctlInit:
+  enabled: false
