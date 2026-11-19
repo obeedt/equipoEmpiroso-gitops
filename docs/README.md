@@ -14,6 +14,7 @@ por qué se tomó cada decisión y cómo se comprobó que funciona.
 | 4 | PostgreSQL en StatefulSet, esquema y datos de ejemplo | [`04-postgresql.md`](04-postgresql.md) | BD y persistencia |
 | 5 | Los cuatro microservicios y la tienda | [`05-microservicios.md`](05-microservicios.md) | Tienda y microservicios |
 | 6 | CI con Tekton: pipeline, Buildah, webhook por Tailscale Funnel y hora de los nodos | [`06-tekton.md`](06-tekton.md) | CI con Tekton |
+| 7 | Monitoreo y alertas: kube-prometheus-stack, 6 alertas a Telegram, 3 dashboards y generador de tráfico | [`07-monitoreo-y-alertas.md`](07-monitoreo-y-alertas.md) | Monitoreo y Alertamiento |
 
 El documento de la etapa 1 está dentro de `cluster/` porque acompaña a los
 playbooks de Ansible: quien copie esa carpeta se lleva también su explicación.

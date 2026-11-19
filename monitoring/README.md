@@ -56,3 +56,6 @@ kubectl -n monitoring create secret generic telegram-bot --from-literal=token="$
 
 El chat ID del grupo sí está en `alertmanager/telegram.yaml`: sin el token no
 sirve para enviar mensajes.
+
+Documentación completa de la etapa:
+[`docs/07-monitoreo-y-alertas.md`](../docs/07-monitoreo-y-alertas.md).

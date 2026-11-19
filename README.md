@@ -31,7 +31,7 @@ El código de los microservicios y el pipeline de Tekton están en
 | 4 · PostgreSQL (StatefulSet + NFS) | ✅ Listo · [documentación](docs/04-postgresql.md) |
 | 5 · Microservicios de la tienda | ✅ Listo · [documentación](docs/05-microservicios.md) |
 | 6 · CI con Tekton (webhook por Tailscale Funnel) | ✅ Listo · [documentación](docs/06-tekton.md) |
-| Monitoreo y alertas | Pendiente |
+| 7 · Monitoreo y alertas (Prometheus, Grafana, Telegram) | ✅ Listo · [documentación](docs/07-monitoreo-y-alertas.md) |
 | Logs y trazas | Pendiente |
 
 ## Accesos
