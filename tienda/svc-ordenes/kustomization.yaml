@@ -10,7 +10,6 @@ labels:
     includeSelectors: false
 
 resources:
-  - configmap.yaml
   - deployment.yaml
   - service.yaml
 
@@ -19,3 +18,10 @@ resources:
 images:
   - name: docker.io/obeedt/devops-ordenes
     newTag: 3283aff
+
+# Configuración en config.env. El nombre del ConfigMap lleva un sufijo con el
+# hash de su contenido y Kustomize lo pone en el Deployment: cambiar un valor
+# (ERROR_RATE, BANNER...) crea pods nuevos que lo leen, sin reiniciar a mano.
+configMapGenerator:
+  - name: svc-ordenes-config
+    envs: [config.env]

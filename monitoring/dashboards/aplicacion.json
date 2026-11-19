@@ -210,7 +210,7 @@
             "lineWidth": 2,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "mode": "none"
             },
@@ -260,14 +260,14 @@
     {
       "type": "timeseries",
       "title": "Errores 5xx (%)",
-      "description": "La alerta Errores5xxAltos salta arriba de 5 % durante 5 min.",
+      "description": "Errores 5xx entre las peticiones de clientes. La alerta Errores5xxAltos salta arriba de 5 % durante 5 min. Sin tráfico no hay porcentaje (hueco en la gráfica).",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "100 * sum by (service) (rate(http_requests_total{namespace=\"tienda\", route!~\"/health.*|/metrics\", status=~\"5..\"}[5m])) / sum by (service) (rate(http_requests_total{namespace=\"tienda\", route!~\"/health.*|/metrics\"}[5m]))",
+          "expr": "100 * (sum by (service) (rate(http_requests_total{namespace=\"tienda\", route!~\"/health.*|/metrics\", status=~\"5..\"}[5m])) or 0 * sum by (service) (rate(http_requests_total{namespace=\"tienda\", route!~\"/health.*|/metrics\"}[5m]))) / sum by (service) (rate(http_requests_total{namespace=\"tienda\", route!~\"/health.*|/metrics\"}[5m]))",
           "legendFormat": "{{service}}",
           "refId": "A"
         }
@@ -280,7 +280,7 @@
             "lineWidth": 2,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "mode": "none"
             },
@@ -355,7 +355,7 @@
             "lineWidth": 2,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "mode": "none"
             },
@@ -426,7 +426,7 @@
             "lineWidth": 2,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "mode": "normal"
             },
@@ -509,7 +509,7 @@
             "lineWidth": 2,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "mode": "none"
             },

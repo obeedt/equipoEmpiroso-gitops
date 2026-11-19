@@ -446,7 +446,7 @@
             "lineWidth": 2,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "mode": "none"
             },
@@ -518,7 +518,7 @@
             "lineWidth": 2,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "mode": "none"
             },
@@ -673,7 +673,7 @@
             "lineWidth": 2,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "mode": "none"
             },
@@ -743,7 +743,7 @@
             "lineWidth": 2,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "mode": "none"
             },
@@ -826,7 +826,7 @@
             "lineWidth": 2,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "mode": "normal"
             },
@@ -896,7 +896,7 @@
             "lineWidth": 2,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "mode": "normal"
             },
@@ -966,7 +966,7 @@
             "lineWidth": 2,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": true,
+            "spanNulls": false,
             "stacking": {
               "mode": "normal"
             },

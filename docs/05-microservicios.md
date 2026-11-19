@@ -212,6 +212,12 @@ vez de desaparecer.
 responda 500, con su log de error y su traza. Se cambia con un commit, como
 todo lo demás. `/health` nunca falla por esto.
 
+La configuración de cada servicio está en `tienda/<servicio>/config.env` y
+Kustomize la convierte en un ConfigMap cuyo nombre lleva el *hash* de su
+contenido. Al cambiar `ERROR_RATE` (o `BANNER` en el frontend), cambia el
+nombre, el Deployment se actualiza y Kubernetes crea pods nuevos que leen el
+valor nuevo. Sin esto, los pods seguirían con el valor viejo hasta reiniciarse.
+
 ### 5.7 Containerfile
 
 ```dockerfile
@@ -322,8 +328,8 @@ En la siguiente etapa, **Tekton** hará estos pasos solo con cada commit.
 
 ```
 tienda/<servicio>/
-├── kustomization.yaml   # recursos + la etiqueta de la imagen (newTag)
-├── configmap.yaml       # configuración del servicio
+├── kustomization.yaml   # recursos + la etiqueta de la imagen (newTag) + el ConfigMap
+├── config.env           # configuración del servicio (ConfigMap <servicio>-config-<hash>)
 ├── deployment.yaml      # réplicas, sondas, requests/limits, seguridad
 ├── service.yaml         # ClusterIP, puerto 80 → 8000
 └── ingress.yaml         # solo el frontend
