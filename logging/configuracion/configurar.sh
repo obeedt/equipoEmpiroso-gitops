@@ -61,6 +61,27 @@ curl -sS --fail-with-body -X POST "$OBJETOS/index-pattern/boletera-logs?overwrit
 curl -sS --fail-with-body -X POST "$OBJETOS/index-pattern/cluster-logs?overwrite=true" \
   -H "$XSRF" -H "$JSON" --data-binary @"$D/patron-cluster-logs.json"; echo
 
+# Lista de campos de cada index pattern (nombre y tipo: @timestamp es fecha,
+# servicio es keyword...). Sin ella, Discover no encuentra @timestamp y
+# muestra todos los campos con tipo desconocido. Se lee de los índices
+# reales, así que se espera a que Fluent Bit haya creado el primero.
+campos() {   # $1 = id del index pattern, $2 = patrón de índices
+  URL="$OSD/api/index_patterns/_fields_for_wildcard?pattern=$2&meta_fields=_source&meta_fields=_id&meta_fields=_type&meta_fields=_index&meta_fields=_score"
+  i=0
+  until curl -sf -o /dev/null "$URL"; do
+    i=$((i + 1))
+    if [ "$i" -gt 60 ]; then echo "  $2: todavía no hay índices; Dashboards leerá los campos después"; return 0; fi
+    sleep 5
+  done
+  # {"fields":[...]} → el arreglo, como texto JSON dentro del atributo "fields"
+  LISTA=$(curl -s "$URL" | sed 's/^{"fields"://; s/}$//' | sed 's/\\/\\\\/g; s/"/\\"/g')
+  curl -sS --fail-with-body -o /dev/null -X PUT "$OBJETOS/index-pattern/$1" -H "$XSRF" -H "$JSON" \
+    -d "{\"attributes\":{\"fields\":\"$LISTA\"}}"
+  echo "  $1: $(echo "$LISTA" | grep -o 'name\\":' | wc -l) campos"
+}
+campos boletera-logs 'boletera-logs-*'
+campos cluster-logs 'cluster-logs-*'
+
 echo "5. Búsqueda guardada \"Errores de la tienda\""
 curl -sS --fail-with-body -X POST "$OBJETOS/search/errores-tienda?overwrite=true" \
   -H "$XSRF" -H "$JSON" --data-binary @"$D/busqueda-errores.json"; echo
